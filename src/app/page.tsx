@@ -7,7 +7,7 @@ import {
   Play, Pause, Volume2, Phone, User, MessageSquare, Send, Loader2,
   CheckCircle2, Maximize, Bed, Home, PartyPopper, MapPin, ExternalLink,
   Eye, ChevronLeft, ChevronRight, Database, Code, Layers, Zap, Shield,
-  RotateCcw, Settings2, AlertCircle,
+  RotateCcw, Settings2, AlertCircle, FileText, Download, Plus,
 } from 'lucide-react';
 import ActivatePratique, { type PratiqueFormData } from '@/components/activate/ActivatePratique';
 import ActivateEmotion, { type EmotionFormData } from '@/components/activate/ActivateEmotion';
@@ -440,6 +440,56 @@ export default function QriooPage() {
       .then((r) => r.json())
       .then((d) => { if (d.success) setSeedReady(true); })
       .catch(() => {});
+  }, []);
+
+  // ─── Étape 4 : Batch state ─────────────────────────────
+  const [batchName, setBatchName] = useState('');
+  const [batchPackType, setBatchPackType] = useState<PackType>('pratique');
+  const [batchQuantity, setBatchQuantity] = useState(16);
+  const [batchCreating, setBatchCreating] = useState(false);
+  const [batchSuccess, setBatchSuccess] = useState('');
+  const [batchError, setBatchError] = useState('');
+  const [batches, setBatches] = useState<Array<{id:string;name:string;packType:string;quantity:number;tagCount:number;statusCounts:Record<string,number>;createdAt:string}>>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+
+  const fetchBatches = useCallback(async () => {
+    setBatchesLoading(true);
+    try {
+      const res = await fetch('/api/batches');
+      const d = await res.json();
+      if (d.batches) setBatches(d.batches);
+    } catch {}
+    setBatchesLoading(false);
+  }, []);
+
+  useEffect(() => { fetchBatches(); }, [fetchBatches]);
+
+  const handleCreateBatch = useCallback(async () => {
+    setBatchCreating(true);
+    setBatchSuccess('');
+    setBatchError('');
+    try {
+      const res = await fetch('/api/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: batchName, packType: batchPackType, quantity: batchQuantity }),
+      });
+      const d = await res.json();
+      if (res.ok && d.success) {
+        setBatchSuccess(d.message);
+        setBatchName('');
+        fetchBatches();
+      } else {
+        setBatchError(d.error || 'Erreur lors de la création');
+      }
+    } catch {
+      setBatchError('Erreur réseau');
+    }
+    setBatchCreating(false);
+  }, [batchName, batchPackType, batchQuantity, fetchBatches]);
+
+  const handleCopyRefs = useCallback((refs: string[]) => {
+    navigator.clipboard.writeText(refs.join('\n')).catch(() => {});
   }, []);
 
   // Generic activate handler
@@ -960,6 +1010,143 @@ switch (packType) {
         </div>
       </section>
 
+      {/* ═══════════════════════════════════════════════════════════════
+           ÉTAPE 4 : GÉNÉRATION DE LOTS (BATCHES)
+           ═══════════════════════════════════════════════════════════════ */}
+      <section className="py-16 px-4 bg-white">
+        <div className="max-w-5xl mx-auto">
+          {/* Header */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold tracking-wider uppercase mb-4">
+              <Layers className="w-3.5 h-3.5" />
+              Étape 4
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">
+              Génération de Lots
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Créez des lots de QR codes par pack_type. Chaque lot génère des références uniques
+              et permet l'export en <strong>PDF imprimable</strong> (grille A4) et <strong>CSV</strong>.
+            </p>
+          </motion.div>
+
+          {/* Create batch form */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            className="max-w-2xl mx-auto bg-gray-50 rounded-2xl border border-gray-200 p-6 mb-10">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-amber-600" /> Nouveau lot
+            </h3>
+            <div className="grid sm:grid-cols-3 gap-4 mb-4">
+              <div className="sm:col-span-1">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Nom du lot *</label>
+                <input
+                  type="text" value={batchName} onChange={(e) => setBatchName(e.target.value)}
+                  placeholder="Ex: Lot Agence Azur"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Pack Type</label>
+                <select
+                  value={batchPackType} onChange={(e) => setBatchPackType(e.target.value as PackType)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                >
+                  {PACKS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.title} ({p.subtitle})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Quantité</label>
+                <input
+                  type="number" min={1} max={500} value={batchQuantity} onChange={(e) => setBatchQuantity(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-400 mt-1">Grille A4 : 16 par page</p>
+              </div>
+            </div>
+            {/* Feedback */}
+            {batchSuccess && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> {batchSuccess}
+              </div>
+            )}
+            {batchError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800 mb-4">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" /> {batchError}
+              </div>
+            )}
+            <button
+              type="button" onClick={handleCreateBatch} disabled={batchCreating || !batchName.trim()}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              {batchCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+              {batchCreating ? 'Génération en cours...' : 'Générer le lot'}
+            </button>
+          </motion.div>
+
+          {/* Batches list */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Lots générés</h3>
+              <button type="button" onClick={fetchBatches} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                <RotateCcw className="w-3.5 h-3.5" /> Rafraîchir
+              </button>
+            </div>
+
+            {batchesLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+            ) : batches.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Aucun lot généré. Créez votre premier lot ci-dessus.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                {batches.map((b) => {
+                  const packInfo = PACKS.find((p) => p.id === b.packType);
+                  const inStock = b.statusCounts?.in_stock || 0;
+                  const activated = b.statusCounts?.activated || 0;
+                  return (
+                    <div key={b.id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: (packInfo?.color || '#999') + '20' }}>
+                        {packInfo?.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-gray-800 text-sm truncate">{b.name}</p>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                            style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
+                            {packInfo?.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          <span>{b.tagCount} tags</span>
+                          <span className="text-amber-600 font-semibold">{inStock} en stock</span>
+                          <span className="text-emerald-600 font-semibold">{activated} activés</span>
+                          <span>{new Date(b.createdAt).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <a href={`/api/batches/${b.id}/pdf`} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all">
+                          <FileText className="w-3.5 h-3.5" /> PDF
+                        </a>
+                        <a href={`/api/batches/${b.id}/csv`} download
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all">
+                          <Download className="w-3.5 h-3.5" /> CSV
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </section>
+
       {/* ─── FOOTER ─── */}
       <footer className="bg-gray-900 text-white py-10 px-4 mt-auto">
         <div className="max-w-6xl mx-auto">
@@ -978,7 +1165,7 @@ switch (packType) {
             </p>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: QRIOO_PURPLE }} />
-              <span className="text-xs text-gray-500">Étapes 1, 2 & 3 : Migrations + Scan + Activation</span>
+              <span className="text-xs text-gray-500">Étapes 1 à 4 : Migrations + Scan + Activation + Batches</span>
             </div>
           </div>
         </div>

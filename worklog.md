@@ -99,3 +99,30 @@ Stage Summary:
 - Components: src/components/activate/{ActivatePratique,ActivateEmotion,ActivateEvenementiel,ActivateImmobilier}.tsx
 - Dev script updated: --webpack flag for Prisma compatibility
 - Full E2E flow verified: seed → fill form → submit → success banner → reset → repeat
+---
+Task ID: 9
+Agent: Main
+Task: Étape 4 - Génération de lots (Batches) avec export PDF/CSV
+
+Work Log:
+- Installed `qrcode` npm package for server-side QR code generation
+- Created src/lib/qr.ts helper (generateQRDataUrl, generateQRBuffer, generateUniqueReference, PACK_COLORS)
+- Created POST /api/batches (Zod validation, create Batch + N Baggage tags with unique refs QROO-YY-XXXXXX)
+- Created GET /api/batches (list batches with statusCounts per status)
+- Created GET /api/batches/[id]/pdf (HTML with A4 4x4 grid of QR code images, colored by pack_type)
+- Created GET /api/batches/[id]/csv (CSV with BOM, semicolon separator, Reference;Pack Type;Statut;Date;URL)
+- Integrated Étape 4 section in page.tsx:
+  - Batch creation form (name, pack_type select, quantity spinbutton)
+  - Success/error feedback banners
+  - Batch list with pack type badge, tag counts (en stock/activés), date
+  - PDF and CSV download links per batch
+- Fixed duplicate `Layers` import in page.tsx
+- API tested: POST creates batch+tags (200), GET lists with statusCounts (200), PDF renders 4 QR codes with data URLs, CSV exports with BOM
+- Browser-verified: form submission creates batch, list updates, PDF link opens A4 grid page
+
+Stage Summary:
+- API: src/app/api/batches/route.ts (POST create + GET list)
+- API: src/app/api/batches/[id]/pdf/route.ts (A4 printable HTML grid)
+- API: src/app/api/batches/[id]/csv/route.ts (CSV with BOM)
+- Helper: src/lib/qr.ts
+- Full E2E: create batch → see in list → open PDF → download CSV

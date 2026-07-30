@@ -1,0 +1,989 @@
+     1→'use client';
+     2→
+     3→import { useState, useCallback, useEffect } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  QrCode, Package, Heart, Calendar, Building2, ArrowRight, Sparkles,
+     7→  Play, Pause, Volume2, Phone, User, MessageSquare, Send, Loader2,
+     8→  CheckCircle2, Maximize, Bed, Home, PartyPopper, MapPin, ExternalLink,
+     9→  Eye, ChevronLeft, ChevronRight, Database, Code, Layers, Zap, Shield,
+    10→  RotateCcw, Settings2, AlertCircle,
+    11→} from 'lucide-react';
+    12→import ActivatePratique, { type PratiqueFormData } from '@/components/activate/ActivatePratique';
+    13→import ActivateEmotion, { type EmotionFormData } from '@/components/activate/ActivateEmotion';
+    14→import ActivateEvenementiel, { type EvenementielFormData } from '@/components/activate/ActivateEvenementiel';
+    15→import ActivateImmobilier, { type ImmobilierFormData } from '@/components/activate/ActivateImmobilier';
+    16→
+    17→// ─── Design tokens ──────────────────────────────────────────
+    18→const QRIOO_PURPLE = '#7C3AED';
+    19→const QRIOO_VIOLET = '#A855F7';
+    20→const QRTAGS_BG = '#E3B23C';
+    21→const AMBER_ACCENT = '#D97706';
+    22→
+    23→// ─── Types ──────────────────────────────────────────────────
+    24→type PackType = 'pratique' | 'emotion' | 'evenementiel' | 'immobilier';
+    25→
+    26→interface PackInfo {
+    27→  id: PackType;
+    28→  title: string;
+    29→  subtitle: string;
+    30→  description: string;
+    31→  icon: React.ReactNode;
+    32→  color: string;
+    33→  gradient: string;
+    34→}
+    35→
+    36→const PACKS: PackInfo[] = [
+    37→  {
+    38→    id: 'pratique',
+    39→    title: 'Pack Pratique',
+    40→    subtitle: 'Objets perdus',
+    41→    description: 'Formulaire de contact + redirection WhatsApp pour retrouver les objets perdus. Le comportement classique QRTags.',
+    42→    icon: <Package className="w-7 h-7" />,
+    43→    color: QRTAGS_BG,
+    44→    gradient: 'from-amber-400 to-amber-600',
+    45→  },
+    46→  {
+    47→    id: 'emotion',
+    48→    title: 'Pack Emotion',
+    49→    subtitle: 'Messages speciaux',
+    50→    description: 'Animation enveloppe + lecteur audio personnalise ou message texte. Pour les cadeaux, cartes de voeux, souvenirs.',
+    51→    icon: <Heart className="w-7 h-7" />,
+    52→    color: QRIOO_PURPLE,
+    53→    gradient: 'from-purple-500 to-pink-500',
+    54→  },
+    55→  {
+    56→    id: 'evenementiel',
+    57→    title: 'Pack Evenementiel',
+    58→    subtitle: "Livre d'or",
+    59→    description: 'Mur de messages interactif pour les evenements : mariages, anniversaires, conferences. Avec enregistrement vocal.',
+    60→    icon: <Calendar className="w-7 h-7" />,
+    61→    color: '#EC4899',
+    62→    gradient: 'from-pink-500 to-rose-500',
+    63→  },
+    64→  {
+    65→    id: 'immobilier',
+    66→    title: 'Pack Immobilier',
+    67→    subtitle: 'Fiches biens',
+    68→    description: 'Fiche produit elegante avec galerie photo, details du bien, visite virtuelle et formulaire de contact agent.',
+    69→    icon: <Building2 className="w-7 h-7" />,
+    70→    color: AMBER_ACCENT,
+    71→    gradient: 'from-amber-500 to-orange-500',
+    72→  },
+    73→];
+    74→
+    75→// ─── Mock data for demo previews ─────────────────────────────
+    76→const MOCK_EMOTION = {
+    77→  contentType: 'audio',
+    78→  contentUrl: null,
+    79→  contentMetadata: {
+    80→    message: 'Joyeux anniversaire ma chérie ! Ce jour est aussi spécial que toi. Je t\'aime plus que tout au monde.',
+    81→    duration: 45,
+    82→  },
+    83→  travelerName: 'Sophie',
+    84→};
+    85→
+    86→const MOCK_IMMOBILIER = {
+    87→  contentMetadata: {
+    88→    title: 'Appartement F3 Vue Mer - Nice',
+    89→    description: 'Magnifique appartement T3 de 75m² avec vue panoramique sur la Méditerranée. Situé au 4ème étage avec ascenseur, rénové en 2023. Proche de la Promenade des Anglais et de toutes commodités.',
+    90→    price: 385000,
+    91→    surface: 75,
+    92→    rooms: 3,
+    93→    images: [
+    94→      'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&h=600&fit=crop',
+    95→      'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&h=600&fit=crop',
+    96→      'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop',
+    97→    ],
+    98→    virtualTourUrl: null,
+    99→  },
+   100→  travelerName: 'Agence Azur Immo',
+   101→};
+   102→
+   103→const MOCK_EVENEMENTIEL = {
+   104→  contentMetadata: {
+   105→    eventName: 'Mariage de Marie & Thomas',
+   106→    eventDate: '2025-09-15',
+   107→    guestBookEnabled: true,
+   108→  },
+   109→  travelerName: 'Marie & Thomas',
+   110→  initialMessages: [
+   111→    { id: '1', authorName: 'Pierre', content: 'Félicitations aux mariés ! Une magnifique journée.', contentType: 'text', contentUrl: null, createdAt: new Date(Date.now() - 3600000).toISOString() },
+   112→    { id: '2', authorName: 'Claire', content: 'Tant de bonheur à vous deux ! Que cette vie commune vous apporte tout ce dont vous rêvez.', contentType: 'text', contentUrl: null, createdAt: new Date(Date.now() - 1800000).toISOString() },
+   113→    { id: '3', authorName: 'Lucas', content: 'Le buffet était incroyable ! Merci pour cette superbe soirée.', contentType: 'text', contentUrl: null, createdAt: new Date(Date.now() - 600000).toISOString() },
+   114→  ],
+   115→};
+   116→
+   117→const MOCK_PRATIQUE = {
+   118→  baggage: {
+   119→    reference: 'QR-DEMO-001',
+   120→    type: 'voyageur',
+   121→    travelerName: 'Ahmed Benali',
+   122→    travelerFirstName: 'Ahmed',
+   123→    status: 'active',
+   124→    agency: 'Voyages Sérénité',
+   125→    isLost: true,
+   126→    objectInfo: {
+   127→      category: 'bagage',
+   128→      category_label: 'Valise cabine',
+   129→      object_name: 'Valise noire Samsonite',
+   130→      brand: 'Samsonite',
+   131→      color: 'Noir',
+   132→      object_description: 'Valise cabine noire avec étiquette rouge',
+   133→      message_to_finder: 'Merci d\'avoir trouvé ma valise. Elle contient des documents importants. Récompense garantie !',
+   134→      city: 'Paris',
+   135→      country: 'France',
+   136→    },
+   137→  },
+   138→};
+   139→
+   140→// ─── Waveform bars generator ────────────────────────────────
+   141→const WAVEFORM_BARS = Array.from({ length: 40 }, (_, i) => {
+   142→  const seed = (i * 7 + 13) % 17;
+   143→  return 0.25 + (seed / 17) * 0.75;
+   144→});
+   145→
+   146→// ═══════════════════════════════════════════════════════════════
+   147→// ═══ EMOTION DEMO COMPONENT ═══════════════════════════════════
+   148→// ═══════════════════════════════════════════════════════════════
+   149→function EmotionDemo() {
+   150→  const [isPlaying, setIsPlaying] = useState(false);
+   151→  const [progress, setProgress] = useState(0);
+   152→
+   153→  const togglePlay = () => {
+   154→    setIsPlaying(!isPlaying);
+   155→    if (!isPlaying) {
+   156→      // Simulate audio progress
+   157→      let p = 0;
+   158→      const interval = setInterval(() => {
+   159→        p += 0.5;
+   160→        if (p >= 100) { clearInterval(interval); setIsPlaying(false); setProgress(0); }
+   161→        else setProgress(p);
+   162→      }, 100);
+   163→      // Store interval to clear on pause
+   164→      (EmotionDemo as unknown as { _interval?: NodeJS.Timeout })._interval = interval;
+   165→    } else {
+   166→      clearInterval((EmotionDemo as unknown as { _interval?: NodeJS.Timeout })._interval);
+   167→    }
+   168→  };
+   169→
+   170→  return (
+   171→    <div className="rounded-2xl overflow-hidden shadow-2xl"
+   172→      style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 30%, #EC4899 70%, #F472B6 100%)' }}
+   173→    >
+   174→      <div className="p-6 text-center">
+   175→        {/* Envelope animation */}
+   176→        <motion.div
+   177→          initial={{ scale: 0.5, opacity: 0 }}
+   178→          animate={{ scale: 1, opacity: 1 }}
+   179→          transition={{ duration: 0.6, ease: 'easeOut' }}
+   180→          className="inline-block mb-4"
+   181→        >
+   182→          <div className="w-20 h-14 rounded-t-lg bg-white/30 backdrop-blur-sm border-2 border-white/40 flex items-center justify-center">
+   183→            <Heart className="w-7 h-7 text-pink-400" />
+   184→          </div>
+   185→        </motion.div>
+   186→        <h3 className="text-xl font-bold text-white mb-1">Sophie vous a envoyé</h3>
+   187→        <p className="text-white/80 text-sm mb-4">un message spécial ✨</p>
+   188→
+   189→        {/* Text message */}
+   190→        <div className="bg-white/15 backdrop-blur-md rounded-2xl p-5 border border-white/20 mb-4">
+   191→          <div className="bg-white/10 rounded-xl p-4 relative">
+   192→            <span className="absolute top-1 left-2 text-3xl text-white/20 font-serif leading-none">“</span>
+   193→            <span className="absolute bottom-1 right-2 text-3xl text-white/20 font-serif leading-none">”</span>
+   194→            <p className="text-white text-sm leading-relaxed font-medium italic pt-3 pb-1 px-2"
+   195→              style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+   196→              Joyeux anniversaire ma chérie ! Ce jour est aussi spécial que toi.
+   197→            </p>
+   198→          </div>
+   199→        </div>
+   200→
+   201→        {/* Audio player */}
+   202→        <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+   203→          <div className="flex items-center gap-2 mb-2">
+   204→            <Volume2 className="w-4 h-4 text-white/80" />
+   205→            <span className="text-white/80 text-xs font-medium">Message vocal</span>
+   206→          </div>
+   207→          <div className="flex items-end gap-[2px] h-12 mb-3 px-1">
+   208→            {WAVEFORM_BARS.map((height, i) => {
+   209→              const barProgress = (i / WAVEFORM_BARS.length) * 100;
+   210→              const isActive = barProgress <= progress;
+   211→              return (
+   212→                <div key={i} className="flex-1 rounded-full transition-all duration-100"
+   213→                  style={{ height: `${height * 100}%`, backgroundColor: isActive ? '#FBBF24' : 'rgba(255,255,255,0.25)', minHeight: '3px' }}
+   214→                />
+   215→              );
+   216→            })}
+   217→          </div>
+   218→          <div className="flex items-center gap-3">
+   219→            <button type="button" onClick={togglePlay}
+   220→              className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
+   221→              {isPlaying ? <Pause className="w-4 h-4 text-purple-700" /> : <Play className="w-4 h-4 text-purple-700 ml-0.5" />}
+   222→            </button>
+   223→            <div className="flex-1">
+   224→              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+   225→                <div className="h-full bg-amber-400 rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
+   226→              </div>
+   227→            </div>
+   228→            <span className="text-white/70 text-xs font-mono">0:{String(Math.floor(progress / 100 * 45)).padStart(2, '0')} / 0:45</span>
+   229→          </div>
+   230→        </div>
+   231→      </div>
+   232→    </div>
+   233→  );
+   234→}
+   235→
+   236→// ═══════════════════════════════════════════════════════════════
+   237→// ═══ IMMOBILIER DEMO COMPONENT ═══════════════════════════════
+   238→// ═══════════════════════════════════════════════════════════════
+   239→function ImmobilierDemo() {
+   240→  const [currentImage, setCurrentImage] = useState(0);
+   241→  const images = MOCK_IMMOBILIER.contentMetadata.images;
+   242→  const meta = MOCK_IMMOBILIER.contentMetadata;
+   243→
+   244→  const formatPrice = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+   245→
+   246→  return (
+   247→    <div className="rounded-2xl overflow-hidden shadow-2xl bg-white">
+   248→      {/* Header */}
+   249→      <div className="bg-gradient-to-r from-amber-600 to-amber-700 px-5 py-3 text-white">
+   250→        <div className="flex items-center gap-2">
+   251→          <Building2 className="w-4 h-4" />
+   252→          <span className="text-xs font-medium opacity-80">Qrioo Immobilier</span>
+   253→        </div>
+   254→        <h3 className="text-lg font-bold mt-1">{meta.title}</h3>
+   255→      </div>
+   256→
+   257→      {/* Image gallery */}
+   258→      <div className="relative bg-gray-100" style={{ height: '200px' }}>
+   259→        <AnimatePresence mode="wait">
+   260→          <motion.img
+   261→            key={currentImage}
+   262→            src={images[currentImage]}
+   263→            alt={`Photo ${currentImage + 1}`}
+   264→            className="w-full h-full object-cover"
+   265→            initial={{ opacity: 0 }}
+   266→            animate={{ opacity: 1 }}
+   267→            exit={{ opacity: 0 }}
+   268→            transition={{ duration: 0.3 }}
+   269→          />
+   270→        </AnimatePresence>
+   271→        {images.length > 1 && (
+   272→          <>
+   273→            <button type="button" onClick={() => setCurrentImage((i) => (i - 1 + images.length) % images.length)}
+   274→              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition">
+   275→              <ChevronLeft className="w-4 h-4" />
+   276→            </button>
+   277→            <button type="button" onClick={() => setCurrentImage((i) => (i + 1) % images.length)}
+   278→              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition">
+   279→              <ChevronRight className="w-4 h-4" />
+   280→            </button>
+   281→            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+   282→              {images.map((_, i) => (
+   283→                <button key={i} type="button" onClick={() => setCurrentImage(i)}
+   284→                  className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentImage ? 'bg-white w-4' : 'bg-white/50'}`} />
+   285→              ))}
+   286→            </div>
+   287→          </>
+   288→        )}
+   289→      </div>
+   290→
+   291→      {/* Details */}
+   292→      <div className="px-5 py-4">
+   293→        <p className="text-2xl font-black text-amber-700 mb-3">{formatPrice(meta.price)}</p>
+   294→        <div className="grid grid-cols-3 gap-2 mb-3">
+   295→          <div className="bg-amber-50 rounded-xl p-2 text-center border border-amber-100">
+   296→            <Maximize className="w-4 h-4 mx-auto mb-0.5 text-amber-600" />
+   297→            <p className="text-base font-bold text-amber-900">{meta.surface}</p>
+   298→            <p className="text-xs text-amber-600">m²</p>
+   299→          </div>
+   300→          <div className="bg-amber-50 rounded-xl p-2 text-center border border-amber-100">
+   301→            <Bed className="w-4 h-4 mx-auto mb-0.5 text-amber-600" />
+   302→            <p className="text-base font-bold text-amber-900">{meta.rooms}</p>
+   303→            <p className="text-xs text-amber-600">pièces</p>
+   304→          </div>
+   305→          <div className="bg-amber-50 rounded-xl p-2 text-center border border-amber-100">
+   306→            <Home className="w-4 h-4 mx-auto mb-0.5 text-amber-600" />
+   307→            <p className="text-xs font-bold text-amber-900 mt-1">À vendre</p>
+   308→            <p className="text-xs text-amber-600">Bien</p>
+   309→          </div>
+   310→        </div>
+   311→        <p className="text-gray-600 text-xs leading-relaxed line-clamp-3">{meta.description}</p>
+   312→      </div>
+   313→    </div>
+   314→  );
+   315→}
+   316→
+   317→// ═══════════════════════════════════════════════════════════════
+   318→// ═══ EVENEMENTIEL DEMO COMPONENT ═════════════════════════════
+   319→// ═══════════════════════════════════════════════════════════════
+   320→function EvenementielDemo() {
+   321→  const { contentMetadata, initialMessages } = MOCK_EVENEMENTIEL;
+   322→  const messages = initialMessages as Array<{ id: string; authorName: string; content: string; createdAt: string }>| undefined;
+   323→
+   324→  return (
+   325→    <div className="rounded-2xl overflow-hidden shadow-2xl bg-white">
+   326→      <div className="relative overflow-hidden"
+   327→        style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 40%, #EC4899 80%, #F472B6 100%)' }}>
+   328→        <div className="px-5 py-5 text-center text-white">
+   329→          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm mb-3">
+   330→            <PartyPopper className="w-6 h-6" />
+   331→          </div>
+   332→          <h3 className="text-lg font-black mb-1">{contentMetadata.eventName}</h3>
+   333→          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1">
+   334→            <Calendar className="w-3.5 h-3.5" />
+   335→            <span className="text-xs font-medium">15 septembre 2025</span>
+   336→          </div>
+   337→        </div>
+   338→      </div>
+   339→      <div className="px-5 py-4">
+   340→        <div className="flex items-center gap-2 mb-3">
+   341→          <MessageSquare className="w-4 h-4" style={{ color: QRIOO_PURPLE }} />
+   342→          <span className="text-sm font-bold text-gray-900">Livre d'or</span>
+   343→          <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+   344→            {messages?.length || 0} messages
+   345→          </span>
+   346→        </div>
+   347→        <div className="max-h-48 overflow-y-auto space-y-2">
+   348→          {messages?.map((msg) => (
+   349→            <div key={msg.id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+   350→              <div className="flex items-center gap-2 mb-1">
+   351→                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold text-xs">
+   352→                  {msg.authorName.charAt(0)}
+   353→                </div>
+   354→                <p className="font-bold text-gray-900 text-xs">{msg.authorName}</p>
+   355→              </div>
+   356→              <p className="text-gray-700 text-xs leading-relaxed pl-9">{msg.content}</p>
+   357→            </div>
+   358→          ))}
+   359→        </div>
+   360→      </div>
+   361→    </div>
+   362→  );
+   363→}
+   364→
+   365→// ═══════════════════════════════════════════════════════════════
+   366→// ═══ PRATIQUE DEMO COMPONENT ═════════════════════════════════
+   367→// ═══════════════════════════════════════════════════════════════
+   368→function PratiqueDemo() {
+   369→  const { baggage } = MOCK_PRATIQUE;
+   370→  const info = baggage.objectInfo;
+   371→
+   372→  return (
+   373→    <div className="rounded-2xl overflow-hidden shadow-2xl"
+   374→      style={{ backgroundColor: QRTAGS_BG }}>
+   375→      <div className="bg-white rounded-xl p-5 mx-3 mt-3 border-2 border-black">
+   376→        <div className="bg-red-100 border-b-2 border-red-500 px-3 py-2 rounded-t-xl -mx-5 -mt-5 mb-4">
+   377→          <p className="text-red-700 font-bold text-xs text-center">⚠️ Cet objet est signalé perdu</p>
+   378→        </div>
+   379→        <div className="flex items-center gap-2 mb-3">
+   380→          <div className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center">
+   381→            <Package className="w-5 h-5 text-black" />
+   382→          </div>
+   383→          <div>
+   384→            <h3 className="text-base font-black text-black">Objet trouvé</h3>
+   385→            <p className="text-xs text-black/60">Ref: {baggage.reference}</p>
+   386→          </div>
+   387→        </div>
+   388→        {info && (
+   389→          <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+   390→            <p className="font-bold text-black text-sm">{info.object_name}</p>
+   391→            {info.brand && <p className="text-xs text-black/70">Marque: {info.brand}</p>}
+   392→            {info.color && <p className="text-xs text-black/70">Couleur: {info.color}</p>}
+   393→          </div>
+   394→        )}
+   395→        {info?.message_to_finder && (
+   396→          <div className="mb-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+   397→            <p className="text-xs font-bold text-amber-800 mb-1">Message du propriétaire :</p>
+   398→            <p className="text-xs text-amber-900 italic">{info.message_to_finder}</p>
+   399→          </div>
+   400→        )}
+   401→        <div className="space-y-2">
+   402→          <input placeholder="Votre nom *" disabled className="w-full min-h-[40px] px-3 py-2 border-2 border-black rounded-lg bg-gray-100 text-gray-400 text-sm" />
+   403→          <input placeholder="Téléphone (optionnel)" disabled className="w-full min-h-[40px] px-3 py-2 border-2 border-black rounded-lg bg-gray-100 text-gray-400 text-sm" />
+   404→          <button disabled className="w-full px-4 py-3 rounded-lg font-black text-black/50 transition flex items-center justify-center gap-2 min-h-[44px] cursor-not-allowed bg-black/10">
+   405→            <Send className="w-4 h-4" /> Prévenir le propriétaire
+   406→          </button>
+   407→        </div>
+   408→      </div>
+   409→    </div>
+   410→  );
+   411→}
+   412→
+   413→// ═══════════════════════════════════════════════════════════════
+   414→// ═══ MAIN PAGE ════════════════════════════════════════════════
+   415→// ═══════════════════════════════════════════════════════════════
+   416→export default function QriooPage() {
+   417→  const [activeTab, setActiveTab] = useState<PackType>('emotion');
+   418→  const [scanRef, setScanRef] = useState('');
+   419→  const [scanResult, setScanResult] = useState<string | null>(null);
+   420→  const [isScanning, setIsScanning] = useState(false);
+   421→
+   422→  // ─── Étape 3 : Activation state ────────────────────────────
+   423→  const [activateTab, setActivateTab] = useState<PackType>('pratique');
+   424→  const [activateLoading, setActivateLoading] = useState(false);
+   425→  const [activateSuccess, setActivateSuccess] = useState<string | null>(null);
+   426→  const [activateError, setActivateError] = useState<string | null>(null);
+   427→  const [seedReady, setSeedReady] = useState(false);
+   428→
+   429→  // Demo references for activation testing
+   430→  const ACTIVATE_REFS: Record<PackType, string> = {
+   431→    pratique: 'ACTIVATE-PRATIQUE-01',
+   432→    emotion: 'ACTIVATE-EMOTION-01',
+   433→    evenementiel: 'ACTIVATE-EVENT-01',
+   434→    immobilier: 'ACTIVATE-IMMO-01',
+   435→  };
+   436→
+   437→  // Seed pending tags on mount
+   438→  useEffect(() => {
+   439→    fetch('/api/seed-activate', { method: 'POST' })
+   440→      .then((r) => r.json())
+   441→      .then((d) => { if (d.success) setSeedReady(true); })
+   442→      .catch(() => {});
+   443→  }, []);
+   444→
+   445→  // Generic activate handler
+   446→  const handleActivate = useCallback(async (packType: PackType, data: Record<string, unknown>) => {
+   447→    setActivateLoading(true);
+   448→    setActivateSuccess(null);
+   449→    setActivateError(null);
+   450→    try {
+   451→      const ref = ACTIVATE_REFS[packType];
+   452→      const res = await fetch(`/api/activate/${ref}`, {
+   453→        method: 'POST',
+   454→        headers: { 'Content-Type': 'application/json' },
+   455→        body: JSON.stringify(data),
+   456→      });
+   457→      const result = await res.json();
+   458→      if (res.ok && result.success) {
+   459→        setActivateSuccess(`Tag ${ref} activé avec succès !`);
+   460→      } else {
+   461→        setActivateError(result.error || result.details?.[0]?.message || 'Erreur lors de l\'activation');
+   462→      }
+   463→    } catch {
+   464→      setActivateError('Erreur réseau. Vérifiez la connexion.');
+   465→    } finally {
+   466→      setActivateLoading(false);
+   467→    }
+   468→  }, []);
+   469→
+   470→  // Reset a tag to pending for re-testing
+   471→  const handleResetTag = useCallback(async (packType: PackType) => {
+   472→    try {
+   473→      const res = await fetch('/api/seed-activate', { method: 'POST' });
+   474→      const d = await res.json();
+   475→      if (d.success) {
+   476→        setActivateSuccess(null);
+   477→        setActivateError(null);
+   478→      }
+   479→    } catch { /* ignore */ }
+   480→  }, []);
+   481→
+   482→  const handleScan = useCallback(async () => {
+   483→    if (!scanRef.trim()) return;
+   484→    setIsScanning(true);
+   485→    setScanResult(null);
+   486→    try {
+   487→      const res = await fetch(`/api/scan/${scanRef.trim()}`, { cache: 'no-store' });
+   488→      const data = await res.json();
+   489→      setScanResult(JSON.stringify(data, null, 2));
+   490→    } catch (err) {
+   491→      setScanResult(JSON.stringify({ error: 'Erreur de connexion' }, null, 2));
+   492→    } finally {
+   493→      setIsScanning(false);
+   494→    }
+   495→  }, [scanRef]);
+   496→
+   497→  const demoMap: Record<PackType, React.ReactNode> = {
+   498→    emotion: <EmotionDemo />,
+   499→    immobilier: <ImmobilierDemo />,
+   500→    evenementiel: <EvenementielDemo />,
+   501→    pratique: <PratiqueDemo />,
+   502→  };
+   503→
+   504→  return (
+   505→    <div className="min-h-screen flex flex-col bg-white">
+   506→      {/* ─── HERO ─── */}
+   507→      <header className="relative overflow-hidden"
+   508→        style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 60%, #6d28d9 100%)' }}>
+   509→        {/* Animated grid bg */}
+   510→        <div className="absolute inset-0 opacity-10"
+   511→          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+   512→
+   513→        <div className="relative z-10 max-w-6xl mx-auto px-4 py-16 md:py-24 text-center">
+   514→          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
+   515→            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-1.5 mb-6 border border-white/20">
+   516→              <QrCode className="w-4 h-4 text-amber-400" />
+   517→              <span className="text-sm font-medium text-white/90">QR Codes Dynamiques Multi-Usages</span>
+   518→            </div>
+   519→
+   520→            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-4 tracking-tight">
+   521→              Qrioo
+   522→            </h1>
+   523→            <p className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto mb-8 leading-relaxed">
+   524→              Transformez vos QR codes en expériences interactives. Objets perdus, messages émotion, événements et immobilier — tout en un.
+   525→            </p>
+   526→
+   527→            <div className="flex flex-wrap items-center justify-center gap-3">
+   528→              <a href="#packs" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-purple-900 font-bold text-sm hover:bg-gray-100 transition shadow-lg min-h-[48px]">
+   529→                <Sparkles className="w-4 h-4" /> Découvrir les packs
+   530→              </a>
+   531→              <a href="#scan-test" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 backdrop-blur-sm text-white font-bold text-sm border border-white/20 hover:bg-white/20 transition min-h-[48px]">
+   532→                <Zap className="w-4 h-4" /> Tester le scan
+   533→              </a>
+   534→            </div>
+   535→          </motion.div>
+   536→
+   537→          {/* Stats bar */}
+   538→          <motion.div
+   539→            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}
+   540→            className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto"
+   541→          >
+   542→            {[
+   543→              { label: 'Packs', value: '4', icon: <Layers className="w-5 h-5" /> },
+   544→              { label: 'Types de contenu', value: '6', icon: <Code className="w-5 h-5" /> },
+   545→              { label: 'Scan ultra-rapide', value: '< 2s', icon: <Zap className="w-5 h-5" /> },
+   546→              { label: 'Sécurisé', value: '100%', icon: <Shield className="w-5 h-5" /> },
+   547→            ].map((stat) => (
+   548→              <div key={stat.label} className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+   549→                <div className="flex items-center justify-center gap-2 text-amber-400 mb-1">{stat.icon}</div>
+   550→                <p className="text-2xl font-black text-white">{stat.value}</p>
+   551→                <p className="text-xs text-white/50">{stat.label}</p>
+   552→              </div>
+   553→            ))}
+   554→          </motion.div>
+   555→        </div>
+   556→      </header>
+   557→
+   558→      {/* ─── PACK TYPES CARDS ─── */}
+   559→      <section id="packs" className="py-16 px-4 bg-gray-50">
+   560→        <div className="max-w-6xl mx-auto">
+   561→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
+   562→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">4 Packs, des usages infinis</h2>
+   563→            <p className="text-gray-600 max-w-xl mx-auto">Chaque QR code peut être configuré avec un pack spécifique pour offrir une expérience adaptée au scanner.</p>
+   564→          </motion.div>
+   565→
+   566→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+   567→            {PACKS.map((pack, i) => (
+   568→              <motion.div
+   569→                key={pack.id}
+   570→                initial={{ opacity: 0, y: 30 }}
+   571→                whileInView={{ opacity: 1, y: 0 }}
+   572→                viewport={{ once: true }}
+   573→                transition={{ delay: i * 0.1, duration: 0.5 }}
+   574→                onClick={() => { setActiveTab(pack.id); document.getElementById('demo-section')?.scrollIntoView({ behavior: 'smooth' }); }}
+   575→                className={`group cursor-pointer rounded-2xl p-6 bg-white border-2 hover:shadow-xl transition-all duration-300 ${activeTab === pack.id ? 'border-purple-500 shadow-lg' : 'border-gray-200 hover:border-gray-300'}`}
+   576→              >
+   577→                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${pack.gradient} flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform`}>
+   578→                  {pack.icon}
+   579→                </div>
+   580→                <h3 className="text-lg font-bold text-gray-900 mb-1">{pack.title}</h3>
+   581→                <p className="text-sm font-medium mb-2" style={{ color: pack.color }}>{pack.subtitle}</p>
+   582→                <p className="text-sm text-gray-600 leading-relaxed">{pack.description}</p>
+   583→              </motion.div>
+   584→            ))}
+   585→          </div>
+   586→        </div>
+   587→      </section>
+   588→
+   589→      {/* ─── INTERACTIVE DEMO ─── */}
+   590→      <section id="demo-section" className="py-16 px-4">
+   591→        <div className="max-w-6xl mx-auto">
+   592→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+   593→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Aperçu des packs</h2>
+   594→            <p className="text-gray-600">Cliquez sur un pack ci-dessus ou utilisez les onglets pour voir la preview.</p>
+   595→          </motion.div>
+   596→
+   597→          {/* Tab bar */}
+   598→          <div className="flex justify-center mb-8">
+   599→            <div className="inline-flex bg-gray-100 rounded-xl p-1 gap-1">
+   600→              {PACKS.map((pack) => (
+   601→                <button
+   602→                  key={pack.id}
+   603→                  type="button"
+   604→                  onClick={() => setActiveTab(pack.id)}
+   605→                  className={`px-4 py-2.5 rounded-lg text-sm font-bold transition-all min-h-[44px] ${activeTab === pack.id
+   606→                    ? 'bg-white text-gray-900 shadow-md'
+   607→                    : 'text-gray-500 hover:text-gray-700' }`}
+   608→                >
+   609→                  {pack.title}
+   610→                </button>
+   611→              ))}
+   612→            </div>
+   613→          </div>
+   614→
+   615→          {/* Demo preview */}
+   616→          <div className="max-w-sm mx-auto">
+   617→            <AnimatePresence mode="wait">
+   618→              <motion.div
+   619→                key={activeTab}
+   620→                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+   621→                animate={{ opacity: 1, y: 0, scale: 1 }}
+   622→                exit={{ opacity: 0, y: -20, scale: 0.95 }}
+   623→                transition={{ duration: 0.4 }}
+   624→              >
+   625→                {demoMap[activeTab]}
+   626→              </motion.div>
+   627→            </AnimatePresence>
+   628→          </div>
+   629→        </div>
+   630→      </section>
+   631→
+   632→      {/* ─── SCAN TEST ─── */}
+   633→      <section id="scan-test" className="py-16 px-4 bg-gray-50">
+   634→        <div className="max-w-3xl mx-auto">
+   635→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+   636→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Tester l'API Scan</h2>
+   637→            <p className="text-gray-600">Entrez une référence QR pour tester le routeur dynamique <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">/api/scan/[reference]</code></p>
+   638→          </motion.div>
+   639→
+   640→          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+   641→            <div className="flex gap-3 mb-4">
+   642→              <input
+   643→                type="text"
+   644→                value={scanRef}
+   645→                onChange={(e) => setScanRef(e.target.value)}
+   646→                onKeyDown={(e) => e.key === 'Enter' && handleScan()}
+   647→                placeholder="Ex: QR-DEMO-001"
+   648→                className="flex-1 min-h-[48px] px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition text-sm font-mono"
+   649→              />
+   650→              <button
+   651→                type="button"
+   652→                onClick={handleScan}
+   653→                disabled={isScanning || !scanRef.trim()}
+   654→                className="px-6 py-3 rounded-xl font-bold text-white transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl min-h-[48px]"
+   655→                style={{ backgroundColor: QRIOO_PURPLE }}
+   656→              >
+   657→                {isScanning ? <><Loader2 className="w-5 h-5 animate-spin" /> Scan...</> : <><Zap className="w-4 h-4" /> Scanner</>}
+   658→              </button>
+   659→            </div>
+   660→
+   661→            {scanResult && (
+   662→              <motion.div
+   663→                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+   664→                className="mt-4 bg-gray-900 rounded-xl p-4 overflow-auto max-h-80"
+   665→              >
+   666→                <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">{scanResult}</pre>
+   667→              </motion.div>
+   668→            )}
+   669→
+   670→            <p className="text-xs text-gray-400 mt-3 text-center">
+   671→              L'API route dynamiquement vers le bon handler selon le <code className="bg-gray-100 px-1 rounded">pack_type</code> du QR code (pratique, emotion, evenementiel, immobilier).
+   672→            </p>
+   673→          </div>
+   674→        </div>
+   675→      </section>
+   676→
+   677→      {/* ─── MIGRATION SUMMARY ─── */}
+   678→      <section className="py-16 px-4">
+   679→        <div className="max-w-4xl mx-auto">
+   680→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+   681→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Étape 1 : Migrations Base de Données</h2>
+   682→            <p className="text-gray-600">Champs ajoutés au modèle <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">Baggage</code> et nouvelles tables créées.</p>
+   683→          </motion.div>
+   684→
+   685→          <div className="grid md:grid-cols-2 gap-6">
+   686→            {/* New fields on Baggage */}
+   687→            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+   688→              <div className="flex items-center gap-3 mb-4">
+   689→                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+   690→                  <Database className="w-5 h-5 text-purple-600" />
+   691→                </div>
+   692→                <div>
+   693→                  <h3 className="font-bold text-gray-900">Nouveaux champs (Baggage)</h3>
+   694→                  <p className="text-xs text-gray-500">Table : baggage</p>
+   695→                </div>
+   696→              </div>
+   697→              <div className="space-y-3">
+   698→                {[
+   699→                  { name: 'pack_type', type: 'VARCHAR', default: "'pratique'", desc: "ENUM('pratique', 'emotion', 'evenementiel', 'immobilier')" },
+   700→                  { name: 'content_type', type: 'VARCHAR', default: 'NULL', desc: "ENUM('text', 'audio', 'video', 'wifi', 'contact', 'url')" },
+   701→                  { name: 'content_url', type: 'VARCHAR', default: 'NULL', desc: 'Lien fichier audio/vidéo sur le storage' },
+   702→                  { name: 'content_metadata', type: 'TEXT (JSON)', default: 'NULL', desc: 'Données spécifiques au pack' },
+   703→                  { name: 'batch_id', type: 'VARCHAR', default: 'NULL', desc: 'Clé étrangère vers Batch' },
+   704→                ].map((field) => (
+   705→                  <div key={field.name} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+   706→                    <div className="flex items-center justify-between mb-1">
+   707→                      <code className="text-sm font-bold text-purple-700 font-mono">{field.name}</code>
+   708→                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-mono">{field.type}</span>
+   709→                    </div>
+   710→                    <p className="text-xs text-gray-600">{field.desc}</p>
+   711→                    <p className="text-xs text-gray-400 mt-0.5">Default: <code className="font-mono">{field.default}</code></p>
+   712→                  </div>
+   713→                ))}
+   714→              </div>
+   715→            </div>
+   716→
+   717→            {/* New tables */}
+   718→            <div className="space-y-6">
+   719→              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+   720→                <div className="flex items-center gap-3 mb-4">
+   721→                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+   722→                    <Layers className="w-5 h-5 text-amber-600" />
+   723→                  </div>
+   724→                  <div>
+   725→                    <h3 className="font-bold text-gray-900">Table : batches</h3>
+   726→                    <p className="text-xs text-gray-500">Génération en masse de QR codes</p>
+   727→                  </div>
+   728→                </div>
+   729→                <div className="space-y-2 text-sm">
+   730→                  {[['name', 'VARCHAR', 'Nom du lot'], ['pack_type', 'VARCHAR', 'Type de pack par défaut'], ['quantity', 'INT', 'Nombre de QR codes'], ['agency_id', 'VARCHAR', 'Agence assignée'], ['status', 'VARCHAR', 'draft | generated | distributed | completed'], ['pdf_url', 'VARCHAR', "URL du PDF d'impression"]].map(([name, type, desc]) => (
+   731→                    <div key={name} className="flex items-center gap-2 text-gray-700">
+   732→                      <code className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">{name}</code>
+   733→                      <span className="text-gray-400">:</span>
+   734→                      <span className="text-xs text-gray-500">{desc}</span>
+   735→                    </div>
+   736→                  ))}
+   737→                </div>
+   738→              </div>
+   739→
+   740→              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+   741→                <div className="flex items-center gap-3 mb-4">
+   742→                  <div className="w-10 h-10 rounded-lg bg-pink-100 flex items-center justify-center">
+   743→                    <MessageSquare className="w-5 h-5 text-pink-600" />
+   744→                  </div>
+   745→                  <div>
+   746→                    <h3 className="font-bold text-gray-900">Table : guest_messages</h3>
+   747→                    <p className="text-xs text-gray-500">Livre d’or (Pack Événementiel)</p>
+   748→                  </div>
+   749→                </div>
+   750→                <div className="space-y-2 text-sm">
+   751→                  {[["baggage_id", "FK", "QR code de lévénement"], ["author_name", "VARCHAR", "Nom de l'invité"], ["content", "TEXT", "Texte du message"], ["content_url", "VARCHAR", "URL audio/vidéo"], ["content_type", "VARCHAR", "text | audio | video"], ["is_moderated", "BOOLEAN", "Modéré par l'hôte"]].map(([name, type, desc]) => (
+   752→                    <div key={name} className="flex items-center gap-2 text-gray-700">
+   753→                      <code className="font-mono text-xs font-bold text-pink-700 bg-pink-50 px-1.5 py-0.5 rounded">{name}</code>
+   754→                      <span className="text-gray-400">:</span>
+   755→                      <span className="text-xs text-gray-500">{desc}</span>
+   756→                    </div>
+   757→                  ))}
+   758→                </div>
+   759→              </div>
+   760→            </div>
+   761→          </div>
+   762→        </div>
+   763→      </section>
+   764→
+   765→      {/* ─── TECH ARCHITECTURE ─── */}
+   766→      <section className="py-16 px-4 bg-gray-50">
+   767→        <div className="max-w-4xl mx-auto">
+   768→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+   769→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Étape 2 : Routeur Dynamique</h2>
+   770→            <p className="text-gray-600">L'API scan détecte le <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">pack_type</code> et renvoie les données adaptées au bon composant frontend.</p>
+   771→          </motion.div>
+   772→
+   773→          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 overflow-x-auto">
+   774→            <pre className="text-sm font-mono text-gray-800 whitespace-pre leading-relaxed">{`// ─── API Route : /api/scan/[reference] ───
+   775→
+   776→switch (packType) {
+   777→  case 'pratique':
+   778→    // → Formulaire de contact + redirection WhatsApp
+   779→    // → Données : objectInfo, isLost, whatsappOwner
+   780→    return <PackPratique />
+   781→
+   782→  case 'emotion':
+   783→    // → Animation enveloppe + lecteur audio / texte
+   784→    // → Données : contentType, contentUrl, contentMetadata
+   785→    return <PackEmotion />
+   786→
+   787→  case 'evenementiel':
+   788→    // → Livre d'or + messages invités
+   789→    // → Données : eventName, eventDate, guestMessages[]
+   790→    return <PackEvenementiel />
+   791→
+   792→  case 'immobilier':
+   793→    // → Fiche bien + galerie + formulaire agent
+   794→    // → Données : title, price, surface, images[]
+   795→    return <PackImmobilier />
+   796→}`}</pre>
+   797→          </div>
+   798→        </div>
+   799→      </section>
+   800→
+   801→      {/* ═══════════════════════════════════════════════════════════════
+   802→           ÉTAPE 3 : FORMULAIRES D'ACTIVATION DYNAMIQUES
+   803→           ═══════════════════════════════════════════════════════════════ */}
+   804→      <section className="py-16 px-4 bg-gradient-to-b from-slate-50 to-white">
+   805→        <div className="max-w-5xl mx-auto">
+   806→          {/* Header */}
+   807→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-8">
+   808→            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold tracking-wider uppercase mb-4">
+   809→              <Settings2 className="w-3.5 h-3.5" />
+   810→              Étape 3
+   811→            </div>
+   812→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">
+   813→              Activation Dynamique par Pack
+   814→            </h2>
+   815→            <p className="text-gray-600 max-w-2xl mx-auto">
+   816→              Chaque tag QR a un formulaire d'activation adapté à son <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">pack_type</code>. Remplissez le formulaire ci-dessous pour activer un tag de démonstration. L'API valide et persiste les données selon le schéma du pack.
+   817→            </p>
+   818→          </motion.div>
+   819→
+   820→          {/* Pack tabs */}
+   821→          <div className="flex flex-wrap justify-center gap-2 mb-8">
+   822→            {PACKS.map((pack) => {
+   823→              const isActive = activateTab === pack.id;
+   824→              const ref = ACTIVATE_REFS[pack.id];
+   825→              return (
+   826→                <button
+   827→                  key={pack.id}
+   828→                  type="button"
+   829→                  onClick={() => { setActivateTab(pack.id); setActivateSuccess(null); setActivateError(null); }}
+   830→                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+   831→                    isActive
+   832→                      ? 'bg-gray-900 text-white shadow-lg scale-105'
+   833→                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:shadow-md'
+   834→                  }`}
+   835→                >
+   836→                  {pack.icon}
+   837→                  <span>{pack.title}</span>
+   838→                  <code className="text-[10px] font-mono opacity-60 ml-1">{ref}</code>
+   839→                </button>
+   840→              );
+   841→            })}
+   842→          </div>
+   843→
+   844→          {/* Success / Error banners */}
+   845→          <AnimatePresence mode="wait">
+   846→            {activateSuccess && (
+   847→              <motion.div
+   848→                key="success"
+   849→                initial={{ opacity: 0, y: -10 }}
+   850→                animate={{ opacity: 1, y: 0 }}
+   851→                exit={{ opacity: 0, y: -10 }}
+   852→                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3"
+   853→              >
+   854→                <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+   855→                <div className="flex-1">
+   856→                  <p className="text-sm font-bold text-emerald-800">Activation réussie</p>
+   857→                  <p className="text-xs text-emerald-700 mt-0.5">{activateSuccess}</p>
+   858→                </div>
+   859→                <button
+   860→                  type="button"
+   861→                  onClick={() => handleResetTag(activateTab)}
+   862→                  className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium whitespace-nowrap"
+   863→                >
+   864→                  <RotateCcw className="w-3 h-3" />
+   865→                  Réinitialiser
+   866→                </button>
+   867→              </motion.div>
+   868→            )}
+   869→            {activateError && (
+   870→              <motion.div
+   871→                key="error"
+   872→                initial={{ opacity: 0, y: -10 }}
+   873→                animate={{ opacity: 1, y: 0 }}
+   874→                exit={{ opacity: 0, y: -10 }}
+   875→                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3"
+   876→              >
+   877→                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+   878→                <div>
+   879→                  <p className="text-sm font-bold text-red-800">Erreur</p>
+   880→                  <p className="text-xs text-red-700 mt-0.5">{activateError}</p>
+   881→                </div>
+   882→              </motion.div>
+   883→            )}
+   884→          </AnimatePresence>
+   885→
+   886→          {/* Activation form (switched by tab) */}
+   887→          <div className="max-w-lg mx-auto">
+   888→            <AnimatePresence mode="wait">
+   889→              <motion.div
+   890→                key={activateTab}
+   891→                initial={{ opacity: 0, x: 20 }}
+   892→                animate={{ opacity: 1, x: 0 }}
+   893→                exit={{ opacity: 0, x: -20 }}
+   894→                transition={{ duration: 0.25 }}
+   895→              >
+   896→                {activateTab === 'pratique' && (
+   897→                  <ActivatePratique
+   898→                    onSubmit={(data) => handleActivate('pratique', data as unknown as Record<string, unknown>)}
+   899→                    isLoading={activateLoading}
+   900→                  />
+   901→                )}
+   902→                {activateTab === 'emotion' && (
+   903→                  <ActivateEmotion
+   904→                    onSubmit={(data) => handleActivate('emotion', data as unknown as Record<string, unknown>)}
+   905→                    isLoading={activateLoading}
+   906→                  />
+   907→                )}
+   908→                {activateTab === 'evenementiel' && (
+   909→                  <ActivateEvenementiel
+   910→                    onSubmit={(data) => handleActivate('evenementiel', data as unknown as Record<string, unknown>)}
+   911→                    isLoading={activateLoading}
+   912→                  />
+   913→                )}
+   914→                {activateTab === 'immobilier' && (
+   915→                  <ActivateImmobilier
+   916→                    onSubmit={(data) => handleActivate('immobilier', data as unknown as Record<string, unknown>)}
+   917→                    isLoading={activateLoading}
+   918→                  />
+   919→                )}
+   920→              </motion.div>
+   921→            </AnimatePresence>
+   922→          </div>
+   923→
+   924→          {/* Architecture note */}
+   925→          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="mt-12 max-w-4xl mx-auto">
+   926→            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 overflow-x-auto">
+   927→              <div className="flex items-center gap-2 mb-4">
+   928→                <Code className="w-4 h-4 text-purple-600" />
+   929→                <h3 className="text-sm font-bold text-gray-700">Architecture : Validation par pack_type</h3>
+   930→              </div>
+   931→              <pre className="text-sm font-mono text-gray-800 whitespace-pre leading-relaxed">{`// ─── API Route : /api/activate/[reference] ───
+   932→
+   933→switch (packType) {
+   934→  case 'pratique':
+   935→    // → Zod : travelerFirstName, travelerLastName, whatsappOwner
+   936→    // → Stocke : customData JSON (category, brand, model...)
+   937→    validate(pratiqueSchema)
+   938→    break;
+   939→
+   940→  case 'emotion':
+   941→    // → Zod : senderName, recipientName, contentType (text|audio)
+   942→    // → Stocke : contentMetadata + contentType + contentUrl
+   943→    validate(emotionSchema)
+   944→    break;
+   945→
+   946→  case 'evenementiel':
+   947→    // → Zod : eventName, eventDate, hostName, guestBookEnabled
+   948→    // → Stocke : contentMetadata JSON
+   949→    validate(evenementielSchema)
+   950→    break;
+   951→
+   952→  case 'immobilier':
+   953→    // → Zod : propertyTitle, propertyType, price, city
+   954→    // → Stocke : contentMetadata JSON (photos[], features[])
+   955→    validate(immobilierSchema)
+   956→    break;
+   957→}`}</pre>
+   958→            </div>
+   959→          </motion.div>
+   960→        </div>
+   961→      </section>
+   962→
+   963→      {/* ─── FOOTER ─── */}
+   964→      <footer className="bg-gray-900 text-white py-10 px-4 mt-auto">
+   965→        <div className="max-w-6xl mx-auto">
+   966→          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+   967→            <div className="flex items-center gap-3">
+   968→              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: QRIOO_PURPLE }}>
+   969→                <QrCode className="w-5 h-5 text-white" />
+   970→              </div>
+   971→              <div>
+   972→                <p className="font-black text-lg">Qrioo</p>
+   973→                <p className="text-xs text-gray-400">QR Codes Dynamiques Multi-Usages</p>
+   974→              </div>
+   975→            </div>
+   976→            <p className="text-sm text-gray-500">
+   977→              Refonte de QRTags en plateforme SaaS multi-usage
+   978→            </p>
+   979→            <div className="flex items-center gap-2">
+   980→              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: QRIOO_PURPLE }} />
+   981→              <span className="text-xs text-gray-500">Étapes 1, 2 & 3 : Migrations + Scan + Activation</span>
+   982→            </div>
+   983→          </div>
+   984→        </div>
+   985→      </footer>
+   986→    </div>
+   987→  );
+   988→}
+   989→
