@@ -72,3 +72,30 @@ Stage Summary:
 - Interactive pack demos work (tab switching, animations)
 - API scan test shows JSON responses
 - Browser-verified at http://localhost:3000/
+---
+Task ID: 8
+Agent: Main + 4 subagents
+Task: Étape 3 - Page d'activation/configuration dynamique par pack_type
+
+Work Log:
+- Created /api/activate/[reference]/route.ts with GET (check status) + POST (activate) handlers
+- POST handler uses Zod validation schemas per pack_type (pratiqueSchema, emotionSchema, evenementielSchema, immobilierSchema)
+- Each schema validates different fields and stores data appropriately (customData for pratique, contentMetadata for emotion/evenementiel/immobilier)
+- Created /api/seed-activate/route.ts to create/reset 4 demo tags (one per pack_type)
+- Created 4 activation form components via subagents:
+  - ActivatePratique.tsx (amber theme, owner info + collapsible object description)
+  - ActivateEmotion.tsx (purple theme, sender/recipient, text/audio radio, message textarea)
+  - ActivateEvenementiel.tsx (emerald theme, event info, date, type select, guest book switch)
+  - ActivateImmobilier.tsx (slate theme, property info, feature tags, description & contact)
+- Integrated Étape 3 section into page.tsx with tab switcher, success/error banners, reset button
+- Fixed Turbopack+Prisma compatibility by adding --webpack flag to dev script
+- Fixed next.config.ts with serverExternalPackages for @prisma/client
+- API tested: all 4 pack types activate successfully (200 OK)
+- Browser-verified: all 4 forms render, submit, and show success feedback
+
+Stage Summary:
+- API: src/app/api/activate/[reference]/route.ts (GET+POST with Zod per pack_type)
+- Seed: src/app/api/seed-activate/route.ts
+- Components: src/components/activate/{ActivatePratique,ActivateEmotion,ActivateEvenementiel,ActivateImmobilier}.tsx
+- Dev script updated: --webpack flag for Prisma compatibility
+- Full E2E flow verified: seed → fill form → submit → success banner → reset → repeat

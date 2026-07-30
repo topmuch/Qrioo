@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   QrCode, Package, Heart, Calendar, Building2, ArrowRight, Sparkles,
   Play, Pause, Volume2, Phone, User, MessageSquare, Send, Loader2,
   CheckCircle2, Maximize, Bed, Home, PartyPopper, MapPin, ExternalLink,
   Eye, ChevronLeft, ChevronRight, Database, Code, Layers, Zap, Shield,
+  RotateCcw, Settings2, AlertCircle,
 } from 'lucide-react';
+import ActivatePratique, { type PratiqueFormData } from '@/components/activate/ActivatePratique';
+import ActivateEmotion, { type EmotionFormData } from '@/components/activate/ActivateEmotion';
+import ActivateEvenementiel, { type EvenementielFormData } from '@/components/activate/ActivateEvenementiel';
+import ActivateImmobilier, { type ImmobilierFormData } from '@/components/activate/ActivateImmobilier';
 
 // ─── Design tokens ──────────────────────────────────────────
 const QRIOO_PURPLE = '#7C3AED';
@@ -414,6 +419,66 @@ export default function QriooPage() {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
+  // ─── Étape 3 : Activation state ────────────────────────────
+  const [activateTab, setActivateTab] = useState<PackType>('pratique');
+  const [activateLoading, setActivateLoading] = useState(false);
+  const [activateSuccess, setActivateSuccess] = useState<string | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [seedReady, setSeedReady] = useState(false);
+
+  // Demo references for activation testing
+  const ACTIVATE_REFS: Record<PackType, string> = {
+    pratique: 'ACTIVATE-PRATIQUE-01',
+    emotion: 'ACTIVATE-EMOTION-01',
+    evenementiel: 'ACTIVATE-EVENT-01',
+    immobilier: 'ACTIVATE-IMMO-01',
+  };
+
+  // Seed pending tags on mount
+  useEffect(() => {
+    fetch('/api/seed-activate', { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setSeedReady(true); })
+      .catch(() => {});
+  }, []);
+
+  // Generic activate handler
+  const handleActivate = useCallback(async (packType: PackType, data: Record<string, unknown>) => {
+    setActivateLoading(true);
+    setActivateSuccess(null);
+    setActivateError(null);
+    try {
+      const ref = ACTIVATE_REFS[packType];
+      const res = await fetch(`/api/activate/${ref}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setActivateSuccess(`Tag ${ref} activé avec succès !`);
+      } else {
+        setActivateError(result.error || result.details?.[0]?.message || 'Erreur lors de l\'activation');
+      }
+    } catch {
+      setActivateError('Erreur réseau. Vérifiez la connexion.');
+    } finally {
+      setActivateLoading(false);
+    }
+  }, []);
+
+  // Reset a tag to pending for re-testing
+  const handleResetTag = useCallback(async (packType: PackType) => {
+    try {
+      const res = await fetch('/api/seed-activate', { method: 'POST' });
+      const d = await res.json();
+      if (d.success) {
+        setActivateSuccess(null);
+        setActivateError(null);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const handleScan = useCallback(async () => {
     if (!scanRef.trim()) return;
     setIsScanning(true);
@@ -733,6 +798,168 @@ switch (packType) {
         </div>
       </section>
 
+      {/* ═══════════════════════════════════════════════════════════════
+           ÉTAPE 3 : FORMULAIRES D'ACTIVATION DYNAMIQUES
+           ═══════════════════════════════════════════════════════════════ */}
+      <section className="py-16 px-4 bg-gradient-to-b from-slate-50 to-white">
+        <div className="max-w-5xl mx-auto">
+          {/* Header */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold tracking-wider uppercase mb-4">
+              <Settings2 className="w-3.5 h-3.5" />
+              Étape 3
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">
+              Activation Dynamique par Pack
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Chaque tag QR a un formulaire d'activation adapté à son <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">pack_type</code>. Remplissez le formulaire ci-dessous pour activer un tag de démonstration. L'API valide et persiste les données selon le schéma du pack.
+            </p>
+          </motion.div>
+
+          {/* Pack tabs */}
+          <div className="flex flex-wrap justify-center gap-2 mb-8">
+            {PACKS.map((pack) => {
+              const isActive = activateTab === pack.id;
+              const ref = ACTIVATE_REFS[pack.id];
+              return (
+                <button
+                  key={pack.id}
+                  type="button"
+                  onClick={() => { setActivateTab(pack.id); setActivateSuccess(null); setActivateError(null); }}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                    isActive
+                      ? 'bg-gray-900 text-white shadow-lg scale-105'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:shadow-md'
+                  }`}
+                >
+                  {pack.icon}
+                  <span>{pack.title}</span>
+                  <code className="text-[10px] font-mono opacity-60 ml-1">{ref}</code>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Success / Error banners */}
+          <AnimatePresence mode="wait">
+            {activateSuccess && (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3"
+              >
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-emerald-800">Activation réussie</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">{activateSuccess}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleResetTag(activateTab)}
+                  className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium whitespace-nowrap"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Réinitialiser
+                </button>
+              </motion.div>
+            )}
+            {activateError && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-red-800">Erreur</p>
+                  <p className="text-xs text-red-700 mt-0.5">{activateError}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Activation form (switched by tab) */}
+          <div className="max-w-lg mx-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activateTab}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.25 }}
+              >
+                {activateTab === 'pratique' && (
+                  <ActivatePratique
+                    onSubmit={(data) => handleActivate('pratique', data as unknown as Record<string, unknown>)}
+                    isLoading={activateLoading}
+                  />
+                )}
+                {activateTab === 'emotion' && (
+                  <ActivateEmotion
+                    onSubmit={(data) => handleActivate('emotion', data as unknown as Record<string, unknown>)}
+                    isLoading={activateLoading}
+                  />
+                )}
+                {activateTab === 'evenementiel' && (
+                  <ActivateEvenementiel
+                    onSubmit={(data) => handleActivate('evenementiel', data as unknown as Record<string, unknown>)}
+                    isLoading={activateLoading}
+                  />
+                )}
+                {activateTab === 'immobilier' && (
+                  <ActivateImmobilier
+                    onSubmit={(data) => handleActivate('immobilier', data as unknown as Record<string, unknown>)}
+                    isLoading={activateLoading}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Architecture note */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="mt-12 max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 overflow-x-auto">
+              <div className="flex items-center gap-2 mb-4">
+                <Code className="w-4 h-4 text-purple-600" />
+                <h3 className="text-sm font-bold text-gray-700">Architecture : Validation par pack_type</h3>
+              </div>
+              <pre className="text-sm font-mono text-gray-800 whitespace-pre leading-relaxed">{`// ─── API Route : /api/activate/[reference] ───
+
+switch (packType) {
+  case 'pratique':
+    // → Zod : travelerFirstName, travelerLastName, whatsappOwner
+    // → Stocke : customData JSON (category, brand, model...)
+    validate(pratiqueSchema)
+    break;
+
+  case 'emotion':
+    // → Zod : senderName, recipientName, contentType (text|audio)
+    // → Stocke : contentMetadata + contentType + contentUrl
+    validate(emotionSchema)
+    break;
+
+  case 'evenementiel':
+    // → Zod : eventName, eventDate, hostName, guestBookEnabled
+    // → Stocke : contentMetadata JSON
+    validate(evenementielSchema)
+    break;
+
+  case 'immobilier':
+    // → Zod : propertyTitle, propertyType, price, city
+    // → Stocke : contentMetadata JSON (photos[], features[])
+    validate(immobilierSchema)
+    break;
+}`}</pre>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* ─── FOOTER ─── */}
       <footer className="bg-gray-900 text-white py-10 px-4 mt-auto">
         <div className="max-w-6xl mx-auto">
@@ -751,7 +978,7 @@ switch (packType) {
             </p>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: QRIOO_PURPLE }} />
-              <span className="text-xs text-gray-500">Étapes 1 & 2 : Migrations + Page Scan Dynamique</span>
+              <span className="text-xs text-gray-500">Étapes 1, 2 & 3 : Migrations + Scan + Activation</span>
             </div>
           </div>
         </div>

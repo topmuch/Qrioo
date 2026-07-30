@@ -1,0 +1,702 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import { useParams, useRouter } from 'next/navigation';
+     5→import {
+     6→  Loader2, AlertCircle, Clock, MapPin, Eye,
+     7→  CheckCircle2, ArrowLeft, MessageCircle, Navigation, Search, Shield, Phone,
+     8→} from 'lucide-react';
+     9→import { motion } from 'framer-motion';
+    10→import QRTagsLogo from '@/components/qrtags/QRTagsLogo';
+    11→
+    12→// ─── Design tokens harmonisés avec la homepage ───
+    13→const COLORS = {
+    14→  bg: '#FFF8E7',           // Fond warm accent (harmonisé avec homepage)
+    15→  bgAlt: '#fafafa',
+    16→  text: '#0d0d0f',
+    17→  textMuted: '#525252',
+    18→  accent: '#FDB900',
+    19→  accentDark: '#c89a00',
+    20→  green: '#22C55E',
+    21→  greenDark: '#16A34A',
+    22→  card: '#ffffff',
+    23→  border: '#e5e5e5',
+    24→  borderAccent: 'rgba(253, 185, 0, 0.3)',
+    25→  red: '#DC2626',
+    26→};
+    27→
+    28→interface ObjectInfo {
+    29→  category?: string | null;
+    30→  category_label?: string | null;
+    31→  object_name?: string | null;
+    32→  object_description?: string | null;
+    33→  brand?: string | null;
+    34→  model?: string | null;
+    35→  color?: string | null;
+    36→  reward?: string | null;
+    37→  message_to_finder?: string | null;
+    38→  city?: string | null;
+    39→  country?: string | null;
+    40→}
+    41→
+    42→interface SuiviScan {
+    43→  id?: string;
+    44→  location: string | null;
+    45→  city: string | null;
+    46→  country: string | null;
+    47→  finderName: string | null;
+    48→  finderPhone: string | null;
+    49→  message: string | null;
+    50→  scannedAt: string;
+    51→  hasMap?: boolean;
+    52→  latitude?: number | null;
+    53→  longitude?: number | null;
+    54→}
+    55→
+    56→interface SuiviData {
+    57→  status: string;
+    58→  message?: string;
+    59→  baggage?: {
+    60→    reference: string;
+    61→    type: string;
+    62→    travelerName: string;
+    63→    status: string;
+    64→    agency?: string | null;
+    65→    createdAt?: string | null;
+    66→    lastScanDate?: string | null;
+    67→    lastLocation?: string | null;
+    68→    lastScanLocation?: string | null;
+    69→    scanCount?: number;
+    70→    declaredLostAt?: string | null;
+    71→    foundAt?: string | null;
+    72→    expiresAt?: string | null;
+    73→    trackingToken?: string | null;
+    74→    objectInfo?: ObjectInfo | null;
+    75→  };
+    76→  lastFinder?: { name: string | null; phone: string | null } | null;
+    77→  scans?: SuiviScan[];
+    78→  lastPosition?: {
+    79→    latitude: number | null;
+    80→    longitude: number | null;
+    81→    address: string | null;
+    82→    hasCoordinates: boolean;
+    83→  } | null;
+    84→}
+    85→
+    86→function formatDate(iso: string | null | undefined): string {
+    87→  if (!iso) return '—';
+    88→  try {
+    89→    return new Date(iso).toLocaleString('fr-FR', {
+    90→      dateStyle: 'long',
+    91→      timeStyle: 'short',
+    92→    });
+    93→  } catch {
+    94→    return '—';
+    95→  }
+    96→}
+    97→
+    98→export default function SuiviPage() {
+    99→  const params = useParams();
+   100→  const router = useRouter();
+   101→  const reference = (params?.reference as string) || '';
+   102→
+   103→  const [data, setData] = useState<SuiviData | null>(null);
+   104→  const [loading, setLoading] = useState(true);
+   105→  const [error, setError] = useState<string | null>(null);
+   106→
+   107→  useEffect(() => {
+   108→    if (!reference) return;
+   109→    if (typeof window === 'undefined') return;
+   110→    try {
+   111→      const KEY = 'qrbag_my_references';
+   112→      const refs: string[] = JSON.parse(localStorage.getItem(KEY) || '[]');
+   113→      if (!refs.includes(reference)) {
+   114→        refs.unshift(reference);
+   115→        localStorage.setItem(KEY, JSON.stringify(refs.slice(0, 20)));
+   116→      }
+   117→    } catch {
+   118→      // silent
+   119→    }
+   120→  }, [reference]);
+   121→
+   122→  useEffect(() => {
+   123→    if (!reference) return;
+   124→    (async () => {
+   125→      try {
+   126→        const res = await fetch(`/api/suivi/${reference}`, { cache: 'no-store' });
+   127→        if (!res.ok) {
+   128→          setError('Erreur lors du chargement');
+   129→          return;
+   130→        }
+   131→        const d: SuiviData = await res.json();
+   132→        setData(d);
+   133→      } catch (err) {
+   134→        console.error('[suivi] error:', err);
+   135→        setError('Erreur réseau');
+   136→      } finally {
+   137→        setLoading(false);
+   138→      }
+   139→    })();
+   140→  }, [reference]);
+   141→
+   142→  useEffect(() => {
+   143→    if (!reference || loading || error) return;
+   144→    const interval = setInterval(async () => {
+   145→      try {
+   146→        const res = await fetch(`/api/suivi/${reference}`, { cache: 'no-store' });
+   147→        if (res.ok) {
+   148→          const d: SuiviData = await res.json();
+   149→          setData(d);
+   150→        }
+   151→      } catch {
+   152→        // silent
+   153→      }
+   154→    }, 30000);
+   155→    return () => clearInterval(interval);
+   156→  }, [reference, loading, error]);
+   157→
+   158→  // ─── Loading ────────────────────────────────────────────────────
+   159→  if (loading) {
+   160→    return (
+   161→      <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.bg }}>
+   162→        <motion.div
+   163→          initial={{ opacity: 0 }}
+   164→          animate={{ opacity: 1 }}
+   165→          className="text-center"
+   166→        >
+   167→          <div
+   168→            className="w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg"
+   169→            style={{ background: COLORS.accent }}
+   170→          >
+   171→            <Search className="w-8 h-8 text-white animate-pulse" />
+   172→          </div>
+   173→          <p className="text-lg font-bold" style={{ color: COLORS.text }}>
+   174→            Chargement du suivi...
+   175→          </p>
+   176→          <p className="text-sm mt-2" style={{ color: COLORS.textMuted }}>
+   177→            Nous localisons votre objet
+   178→          </p>
+   179→        </motion.div>
+   180→      </main>
+   181→    );
+   182→  }
+   183→
+   184→  // ─── Error ──────────────────────────────────────────────────────
+   185→  if (error || !data || !data.baggage) {
+   186→    return (
+   187→      <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: COLORS.bg }}>
+   188→        <motion.div
+   189→          initial={{ opacity: 0, y: 20 }}
+   190→          animate={{ opacity: 1, y: 0 }}
+   191→          className="max-w-md w-full text-center rounded-2xl p-8 shadow-xl"
+   192→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   193→        >
+   194→          <div
+   195→            className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center"
+   196→            style={{ background: '#FEE2E2' }}
+   197→          >
+   198→            <AlertCircle className="w-7 h-7" style={{ color: COLORS.red }} />
+   199→          </div>
+   200→          <h1 className="text-2xl font-black mb-3" style={{ color: COLORS.text }}>Suivi indisponible</h1>
+   201→          <p className="mb-6" style={{ color: COLORS.textMuted }}>
+   202→            {error || data?.message || 'Ce tag n\'existe pas ou n\'est pas encore activé.'}
+   203→          </p>
+   204→          <a
+   205→            href="/"
+   206→            className="inline-block px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+   207→            style={{ background: COLORS.accent, color: COLORS.text }}
+   208→          >
+   209→            Retour à l&apos;accueil
+   210→          </a>
+   211→        </motion.div>
+   212→      </main>
+   213→    );
+   214→  }
+   215→
+   216→  // ─── Pending activation ─────────────────────────────────────────
+   217→  if (data.status === 'pending_activation') {
+   218→    return (
+   219→      <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: COLORS.bg }}>
+   220→        <motion.div
+   221→          initial={{ opacity: 0, y: 20 }}
+   222→          animate={{ opacity: 1, y: 0 }}
+   223→          className="max-w-md w-full text-center rounded-2xl p-8 shadow-xl"
+   224→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   225→        >
+   226→          <div
+   227→            className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center"
+   228→            style={{ background: COLORS.bg }}
+   229→          >
+   230→            <Clock className="w-7 h-7" style={{ color: COLORS.accentDark }} />
+   231→          </div>
+   232→          <h1 className="text-2xl font-black mb-3" style={{ color: COLORS.text }}>Tag non activé</h1>
+   233→          <p className="mb-6" style={{ color: COLORS.textMuted }}>Ce QR code n&apos;a pas encore été activé par son propriétaire.</p>
+   234→          <a
+   235→            href={`/inscrire?qr=${reference}`}
+   236→            className="inline-block px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+   237→            style={{ background: COLORS.green, color: 'white' }}
+   238→          >
+   239→            L&apos;activer maintenant
+   240→          </a>
+   241→        </motion.div>
+   242→      </main>
+   243→    );
+   244→  }
+   245→
+   246→  // ─── Expired ────────────────────────────────────────────────────
+   247→  if (data.status === 'expired') {
+   248→    return (
+   249→      <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: COLORS.bg }}>
+   250→        <motion.div
+   251→          initial={{ opacity: 0, y: 20 }}
+   252→          animate={{ opacity: 1, y: 0 }}
+   253→          className="max-w-md w-full text-center rounded-2xl p-8 shadow-xl"
+   254→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   255→        >
+   256→          <div
+   257→            className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center"
+   258→            style={{ background: '#FEE2E2' }}
+   259→          >
+   260→            <Clock className="w-7 h-7" style={{ color: COLORS.red }} />
+   261→          </div>
+   262→          <h1 className="text-2xl font-black mb-3" style={{ color: COLORS.text }}>Tag expiré</h1>
+   263→          <p className="mb-6" style={{ color: COLORS.textMuted }}>La période de validité de ce tag est terminée.</p>
+   264→          <a
+   265→            href="/"
+   266→            className="inline-block px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+   267→            style={{ background: COLORS.accent, color: COLORS.text }}
+   268→          >
+   269→            Retour à l&apos;accueil
+   270→          </a>
+   271→        </motion.div>
+   272→      </main>
+   273→    );
+   274→  }
+   275→
+   276→  // ─── Blocked ────────────────────────────────────────────────────
+   277→  if (data.status === 'blocked') {
+   278→    return (
+   279→      <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: COLORS.bg }}>
+   280→        <motion.div
+   281→          initial={{ opacity: 0, y: 20 }}
+   282→          animate={{ opacity: 1, y: 0 }}
+   283→          className="max-w-md w-full text-center rounded-2xl p-8 shadow-xl"
+   284→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   285→        >
+   286→          <div
+   287→            className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center"
+   288→            style={{ background: '#FEE2E2' }}
+   289→          >
+   290→            <AlertCircle className="w-7 h-7" style={{ color: COLORS.red }} />
+   291→          </div>
+   292→          <h1 className="text-2xl font-black mb-3" style={{ color: COLORS.text }}>Tag bloqué</h1>
+   293→          <a
+   294→            href="/"
+   295→            className="inline-block px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+   296→            style={{ background: COLORS.accent, color: COLORS.text }}
+   297→          >
+   298→            Retour à l&apos;accueil
+   299→          </a>
+   300→        </motion.div>
+   301→      </main>
+   302→    );
+   303→  }
+   304→
+   305→  const baggage = data.baggage;
+   306→  const objInfo = baggage.objectInfo;
+   307→  const isLost = data.status === 'lost' || Boolean(baggage.declaredLostAt && !baggage.foundAt);
+   308→  const scans = data.scans || [];
+   309→  const lastFinder = data.lastFinder;
+   310→  const hasTrackingToken = Boolean(baggage.trackingToken);
+   311→
+   312→  return (
+   313→    <main className="min-h-screen py-8 px-4" style={{ backgroundColor: COLORS.bg }}>
+   314→      <div className="max-w-2xl mx-auto">
+   315→        {/* Header */}
+   316→        <motion.div
+   317→          initial={{ opacity: 0, y: 20 }}
+   318→          animate={{ opacity: 1, y: 0 }}
+   319→          className="text-center mb-8"
+   320→        >
+   321→          <div className="inline-block px-6 py-3 rounded-xl mb-4 shadow-lg" style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}>
+   322→            <QRTagsLogo size="md" variant="light" />
+   323→          </div>
+   324→          <div
+   325→            className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4"
+   326→            style={{
+   327→              background: isLost ? '#FEE2E2' : '#DCFCE7',
+   328→              border: `2px solid ${isLost ? COLORS.red : COLORS.green}`,
+   329→            }}
+   330→          >
+   331→            <div
+   332→              className="w-3 h-3 rounded-full animate-pulse"
+   333→              style={{ backgroundColor: isLost ? COLORS.red : COLORS.green }}
+   334→            />
+   335→            <span className="font-bold text-sm" style={{ color: isLost ? COLORS.red : COLORS.greenDark }}>
+   336→              {isLost ? 'Objet signalé perdu' : 'Objet suivi'}
+   337→            </span>
+   338→          </div>
+   339→          <h1 className="text-3xl font-black mb-2" style={{ color: COLORS.text }}>
+   340→            Suivi de l&apos;objet
+   341→          </h1>
+   342→          <p style={{ color: COLORS.textMuted }}>
+   343→            Référence : <span className="font-bold" style={{ color: COLORS.text }}>{baggage.reference}</span>
+   344→          </p>
+   345→        </motion.div>
+   346→
+   347→        {/* Propriétaire tracking link */}
+   348→        {hasTrackingToken && (
+   349→          <motion.div
+   350→            initial={{ opacity: 0, y: 20 }}
+   351→            animate={{ opacity: 1, y: 0 }}
+   352→            transition={{ delay: 0.1 }}
+   353→            className="rounded-2xl p-6 mb-6 shadow-xl"
+   354→            style={{ background: COLORS.card, border: `2px solid ${COLORS.borderAccent}` }}
+   355→          >
+   356→            <div className="flex items-start gap-3">
+   357→              <div
+   358→                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+   359→                style={{ background: '#DCFCE7' }}
+   360→              >
+   361→                <CheckCircle2 className="w-5 h-5" style={{ color: COLORS.green }} />
+   362→              </div>
+   363→              <div className="flex-1">
+   364→                <p className="font-bold mb-1" style={{ color: COLORS.text }}>Vous êtes le propriétaire de cet objet ?</p>
+   365→                <p className="text-sm mb-3" style={{ color: COLORS.textMuted }}>
+   366→                  Accédez à votre page de suivi propriétaire pour signaler une perte, partager le lien
+   367→                  sur WhatsApp, ou voir les statistiques détaillées.
+   368→                </p>
+   369→                <button
+   370→                  type="button"
+   371→                  onClick={() => router.push(`/track/${baggage.trackingToken}`)}
+   372→                  className="inline-block px-5 py-2 rounded-xl font-bold text-sm transition-all hover:scale-105"
+   373→                  style={{ background: COLORS.green, color: 'white' }}
+   374→                >
+   375→                  Ouvrir ma page de suivi &rarr;
+   376→                </button>
+   377→              </div>
+   378→            </div>
+   379→          </motion.div>
+   380→        )}
+   381→
+   382→        {/* Carte : infos objet */}
+   383→        <motion.div
+   384→          initial={{ opacity: 0, y: 20 }}
+   385→          animate={{ opacity: 1, y: 0 }}
+   386→          transition={{ delay: 0.2 }}
+   387→          className="rounded-2xl p-6 mb-6 shadow-xl"
+   388→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   389→        >
+   390→          <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: COLORS.text }}>
+   391→            <MapPin className="w-5 h-5" style={{ color: COLORS.accent }} />
+   392→            Informations
+   393→          </h3>
+   394→          <div className="rounded-xl p-4" style={{ background: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+   395→            <div className="grid grid-cols-2 gap-4">
+   396→              <div>
+   397→                <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Propriétaire</p>
+   398→                <p className="font-bold" style={{ color: COLORS.text }}>{baggage.travelerName || 'Anonyme'}</p>
+   399→              </div>
+   400→              <div>
+   401→                <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Statut</p>
+   402→                <p className="font-bold" style={{ color: isLost ? COLORS.red : COLORS.green }}>
+   403→                  {isLost ? 'Perdu' : 'Actif'}
+   404→                </p>
+   405→              </div>
+   406→              {objInfo?.object_name && (
+   407→                <div>
+   408→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Objet</p>
+   409→                  <p className="font-bold" style={{ color: COLORS.text }}>{objInfo.object_name}</p>
+   410→                </div>
+   411→              )}
+   412→              {objInfo?.category_label && (
+   413→                <div>
+   414→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Catégorie</p>
+   415→                  <p className="font-bold" style={{ color: COLORS.text }}>{objInfo.category_label}</p>
+   416→                </div>
+   417→              )}
+   418→              {objInfo?.color && (
+   419→                <div>
+   420→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Couleur</p>
+   421→                  <p className="font-bold" style={{ color: COLORS.text }}>{objInfo.color}</p>
+   422→                </div>
+   423→              )}
+   424→              {objInfo?.brand && (
+   425→                <div>
+   426→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Marque</p>
+   427→                  <p className="font-bold" style={{ color: COLORS.text }}>{objInfo.brand}</p>
+   428→                </div>
+   429→              )}
+   430→              {baggage.agency && (
+   431→                <div>
+   432→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Agence</p>
+   433→                  <p className="font-bold" style={{ color: COLORS.text }}>{baggage.agency}</p>
+   434→                </div>
+   435→              )}
+   436→              {baggage.expiresAt && (
+   437→                <div>
+   438→                  <p className="text-xs uppercase font-bold" style={{ color: COLORS.textMuted }}>Expire le</p>
+   439→                  <p className="font-bold" style={{ color: COLORS.text }}>{formatDate(baggage.expiresAt)}</p>
+   440→                </div>
+   441→              )}
+   442→            </div>
+   443→
+   444→            {objInfo?.object_description && (
+   445→              <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+   446→                <p className="text-xs uppercase font-bold mb-1" style={{ color: COLORS.textMuted }}>Description</p>
+   447→                <p className="text-sm" style={{ color: COLORS.text }}>{objInfo.object_description}</p>
+   448→              </div>
+   449→            )}
+   450→
+   451→            {objInfo?.message_to_finder && (
+   452→              <div className="mt-4 p-3 rounded-xl" style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderAccent}` }}>
+   453→                <p className="text-xs uppercase font-bold mb-1" style={{ color: COLORS.accentDark }}>Message du propriétaire</p>
+   454→                <p className="text-sm italic" style={{ color: COLORS.text }}>&ldquo;{objInfo.message_to_finder}&rdquo;</p>
+   455→              </div>
+   456→            )}
+   457→          </div>
+   458→        </motion.div>
+   459→
+   460→        {/* Carte : statistiques */}
+   461→        <motion.div
+   462→          initial={{ opacity: 0, y: 20 }}
+   463→          animate={{ opacity: 1, y: 0 }}
+   464→          transition={{ delay: 0.3 }}
+   465→          className="rounded-2xl p-6 mb-6 shadow-xl"
+   466→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   467→        >
+   468→          <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: COLORS.text }}>
+   469→            <Eye className="w-5 h-5" style={{ color: COLORS.accent }} />
+   470→            Statistiques
+   471→          </h3>
+   472→          <div className="grid grid-cols-3 gap-4">
+   473→            <div className="text-center p-4 rounded-xl" style={{ background: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+   474→              <Eye className="w-5 h-5 mx-auto mb-1" style={{ color: COLORS.accent }} />
+   475→              <p className="text-3xl font-black" style={{ color: COLORS.text }}>{baggage.scanCount || 0}</p>
+   476→              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>Scans</p>
+   477→            </div>
+   478→            <div className="text-center p-4 rounded-xl" style={{ background: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+   479→              <Clock className="w-5 h-5 mx-auto mb-1" style={{ color: COLORS.accent }} />
+   480→              <p className="text-3xl font-black" style={{ color: COLORS.text }}>{scans.length}</p>
+   481→              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>Activités</p>
+   482→            </div>
+   483→            <div className="text-center p-4 rounded-xl" style={{ background: isLost ? '#FEE2E2' : '#DCFCE7', border: `1px solid ${isLost ? '#FCA5A5' : '#BBF7D0'}` }}>
+   484→              {isLost ? (
+   485→                <>
+   486→                  <AlertCircle className="w-5 h-5 mx-auto mb-1" style={{ color: COLORS.red }} />
+   487→                  <p className="text-2xl font-black" style={{ color: COLORS.red }}>!</p>
+   488→                  <p className="text-xs mt-1" style={{ color: COLORS.red }}>Perdu</p>
+   489→                </>
+   490→              ) : (
+   491→                <>
+   492→                  <CheckCircle2 className="w-5 h-5 mx-auto mb-1" style={{ color: COLORS.green }} />
+   493→                  <p className="text-2xl font-black" style={{ color: COLORS.green }}>OK</p>
+   494→                  <p className="text-xs mt-1" style={{ color: COLORS.greenDark }}>Sûr</p>
+   495→                </>
+   496→              )}
+   497→            </div>
+   498→          </div>
+   499→
+   500→          <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+   501→            <p className="text-sm flex items-center gap-1" style={{ color: COLORS.textMuted }}>
+   502→              <Clock className="w-4 h-4" /> Dernière activité
+   503→            </p>
+   504→            <p className="font-bold" style={{ color: COLORS.text }}>{formatDate(baggage.lastScanDate)}</p>
+   505→            {baggage.lastScanLocation && (
+   506→              <>
+   507→                <p className="text-sm mt-2 flex items-center gap-1" style={{ color: COLORS.textMuted }}>
+   508→                  <MapPin className="w-4 h-4" /> Dernière position connue
+   509→                </p>
+   510→                <p className="font-bold" style={{ color: COLORS.text }}>{baggage.lastScanLocation}</p>
+   511→              </>
+   512→            )}
+   513→          </div>
+   514→        </motion.div>
+   515→
+   516→        {/* Carte : dernier trouveur — MISE EN ÉVIDENCE + boutons d'action */}
+   517→        {lastFinder && (lastFinder.name || lastFinder.phone) && (
+   518→          <motion.div
+   519→            initial={{ opacity: 0, y: 20 }}
+   520→            animate={{ opacity: 1, y: 0 }}
+   521→            transition={{ delay: 0.4 }}
+   522→            className="rounded-2xl p-6 mb-6 shadow-2xl"
+   523→            style={{
+   524→              background: `linear-gradient(135deg, ${COLORS.green} 0%, ${COLORS.greenDark} 100%)`,
+   525→              border: `3px solid ${COLORS.greenDark}`,
+   526→            }}
+   527→          >
+   528→            {/* Badge "Action requise" + titre */}
+   529→            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+   530→              <h3 className="text-lg font-black flex items-center gap-2 text-white">
+   531→                <MessageCircle className="w-5 h-5" />
+   532→                Dernier trouveur
+   533→              </h3>
+   534→              <span
+   535→                className="text-xs font-black px-3 py-1 rounded-full text-white animate-pulse"
+   536→                style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
+   537→              >
+   538→                ● ACTION REQUISE
+   539→              </span>
+   540→            </div>
+   541→
+   542→            {/* Carte infos trouveur */}
+   543→            <div
+   544→              className="rounded-xl p-4 mb-4"
+   545→              style={{ backgroundColor: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)' }}
+   546→            >
+   547→              {lastFinder.name && (
+   548→                <p className="text-sm">
+   549→                  <span className="text-white/80">👤 Nom :</span>{' '}
+   550→                  <span className="font-black text-white text-base">{lastFinder.name}</span>
+   551→                </p>
+   552→              )}
+   553→              {lastFinder.phone && (
+   554→                <p className="text-sm mt-2">
+   555→                  <span className="text-white/80">📞 Téléphone :</span>{' '}
+   556→                  <a
+   557→                    href={`tel:${lastFinder.phone}`}
+   558→                    className="font-black text-white text-base underline decoration-2 underline-offset-2"
+   559→                    dir="ltr"
+   560→                  >
+   561→                    {lastFinder.phone}
+   562→                  </a>
+   563→                </p>
+   564→              )}
+   565→            </div>
+   566→
+   567→            {/* Boutons d'action : WhatsApp + Téléphone */}
+   568→            {lastFinder.phone && (() => {
+   569→              // Normaliser le numéro pour wa.me (chiffres uniquement, sans +)
+   570→              const digits = lastFinder.phone.replace(/[^0-9]/g, '');
+   571→              if (!digits) return null;
+   572→              const waUrl = `https://wa.me/${digits}?text=${encodeURIComponent(
+   573→                `Bonjour${lastFinder.name ? ` ${lastFinder.name}` : ''}, ` +
+   574→                `vous avez trouvé mon objet (réf. ${baggage?.reference || reference}). ` +
+   575→                `Merci beaucoup ! Pouvez-vous m'indiquer comment le récupérer ? — Message envoyé via QRTags.`
+   576→              )}`;
+   577→              return (
+   578→                <div className="flex flex-col sm:flex-row gap-2">
+   579→                  <a
+   580→                    href={waUrl}
+   581→                    target="_blank"
+   582→                    rel="noopener noreferrer"
+   583→                    className="wa-pulse flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-black text-white text-sm transition hover:opacity-90 min-h-[48px]"
+   584→                    style={{ backgroundColor: '#075E54', border: '2px solid #054c46' }}
+   585→                  >
+   586→                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+   587→                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+   588→                    </svg>
+   589→                    Contacter le trouveur via WhatsApp
+   590→                  </a>
+   591→                  <a
+   592→                    href={`tel:${lastFinder.phone}`}
+   593→                    className="flex-1 sm:flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-black text-sm transition hover:opacity-90 min-h-[48px]"
+   594→                    style={{ backgroundColor: 'white', color: COLORS.greenDark, border: '2px solid white' }}
+   595→                  >
+   596→                    <Phone className="w-5 h-5" />
+   597→                    Appeler
+   598→                  </a>
+   599→                </div>
+   600→              );
+   601→            })()}
+   602→
+   603→            <p className="text-xs text-white/80 mt-3 text-center">
+   604→              💡 Cliquez sur WhatsApp ou Appeler pour convenir de la restitution.
+   605→            </p>
+   606→          </motion.div>
+   607→        )}
+   608→
+   609→        {/* Carte : historique des scans */}
+   610→        <motion.div
+   611→          initial={{ opacity: 0, y: 20 }}
+   612→          animate={{ opacity: 1, y: 0 }}
+   613→          transition={{ delay: 0.5 }}
+   614→          className="rounded-2xl p-6 mb-6 shadow-xl"
+   615→          style={{ background: COLORS.card, border: `2px solid ${COLORS.border}` }}
+   616→        >
+   617→          <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: COLORS.text }}>
+   618→            <Navigation className="w-5 h-5" style={{ color: COLORS.accent }} />
+   619→            Historique des scans
+   620→          </h3>
+   621→          {scans.length === 0 ? (
+   622→            <div className="text-center py-8">
+   623→              <div
+   624→                className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center"
+   625→                style={{ background: COLORS.bg }}
+   626→              >
+   627→                <Eye className="w-6 h-6" style={{ color: COLORS.accent }} />
+   628→              </div>
+   629→              <p className="font-bold" style={{ color: COLORS.text }}>Aucun scan pour le moment</p>
+   630→              <p className="text-sm mt-2" style={{ color: COLORS.textMuted }}>
+   631→                Si quelqu&apos;un trouve cet objet et scanne le QR code, vous verrez l&apos;activité ici.
+   632→              </p>
+   633→            </div>
+   634→          ) : (
+   635→            <div className="space-y-3">
+   636→              {scans.map((scan, idx) => (
+   637→                <motion.div
+   638→                  key={scan.id || idx}
+   639→                  initial={{ opacity: 0, x: -10 }}
+   640→                  animate={{ opacity: 1, x: 0 }}
+   641→                  transition={{ delay: 0.1 * idx }}
+   642→                  className="p-4 rounded-xl"
+   643→                  style={{ background: COLORS.bgAlt, borderLeft: `4px solid ${COLORS.accent}` }}
+   644→                >
+   645→                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+   646→                    <p className="text-sm font-bold flex items-center gap-1" style={{ color: COLORS.text }}>
+   647→                      <Clock className="w-3 h-3" /> {formatDate(scan.scannedAt)}
+   648→                    </p>
+   649→                    <span
+   650→                      className="text-xs px-2 py-1 rounded-full font-bold"
+   651→                      style={{ background: COLORS.bg, color: COLORS.accentDark }}
+   652→                    >
+   653→                      Scan #{scans.length - idx}
+   654→                    </span>
+   655→                  </div>
+   656→                  {(scan.location || scan.city) && (
+   657→                    <p className="text-sm flex items-center gap-1" style={{ color: COLORS.textMuted }}>
+   658→                      <MapPin className="w-3 h-3" /> {scan.location || scan.city}
+   659→                    </p>
+   660→                  )}
+   661→                  {scan.finderName && (
+   662→                    <p className="text-sm mt-1" style={{ color: COLORS.textMuted }}>
+   663→                      Trouveur : {scan.finderName}
+   664→                      {scan.finderPhone ? ` · ${scan.finderPhone}` : ''}
+   665→                    </p>
+   666→                  )}
+   667→                  {scan.message && (
+   668→                    <p className="text-sm mt-2 italic" style={{ color: COLORS.textMuted }}>
+   669→                      &ldquo;{scan.message}&rdquo;
+   670→                    </p>
+   671→                  )}
+   672→                  {scan.latitude && scan.longitude && (
+   673→                    <a
+   674→                      href={`https://www.google.com/maps?q=${scan.latitude},${scan.longitude}`}
+   675→                      target="_blank"
+   676→                      rel="noreferrer"
+   677→                      className="text-xs underline mt-2 inline-block font-bold"
+   678→                      style={{ color: COLORS.green }}
+   679→                    >
+   680→                      Voir sur Google Maps
+   681→                    </a>
+   682→                  )}
+   683→                </motion.div>
+   684→              ))}
+   685→            </div>
+   686→          )}
+   687→        </motion.div>
+   688→
+   689→        {/* Footer */}
+   690→        <div className="text-center mb-8">
+   691→          <a href="/" className="inline-flex items-center gap-2 text-sm font-medium transition-all hover:opacity-70" style={{ color: COLORS.textMuted }}>
+   692→            <ArrowLeft className="w-4 h-4" /> Retour à l&apos;accueil
+   693→          </a>
+   694→          <p className="text-sm mt-2" style={{ color: COLORS.textMuted }}>
+   695→            Propulsé par <span className="font-bold" style={{ color: COLORS.text }}>QRTags</span>
+   696→          </p>
+   697→        </div>
+   698→      </div>
+   699→    </main>
+   700→  );
+   701→}
+   702→
