@@ -1,7 +1,8 @@
-FROM node:20-alpine AS base
+# Qrioo - Dockerfile for Coolify
+FROM node:20-alpine
 
-# Install sqlite3, git and bun
-RUN apk add --no-cache sqlite-libs git
+# Install required packages
+RUN apk add --no-cache git libc6-compat sqlite
 RUN npm install -g bun
 
 WORKDIR /app
@@ -10,23 +11,22 @@ WORKDIR /app
 RUN git clone https://github.com/topmuch/Qrioo.git .
 
 # Install dependencies
-RUN bun install --frozen-lockfile || bun install
+RUN bun install
 
-# Generate Prisma client
-RUN bunx prisma generate
+# Generate Prisma Client
+RUN npx prisma generate
 
-# Build Next.js
+# Build the application
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL=file:/app/data/qrioo.db
 RUN bun run build
-
-# Create data directory for SQLite
 RUN mkdir -p /app/data
 
-# Set environment variables
-ENV DATABASE_URL=file:/app/data/qrioo.db
-ENV NODE_ENV=production
-
-# Expose port
 EXPOSE 3000
 
-# Run db push + start server
-CMD ["sh", "-c", "bunx prisma db push --accept-data-loss 2>/dev/null; bun run start"]
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV DATABASE_URL=file:/app/data/qrioo.db
+
+# Start command - migrate db and start server
+CMD sh -c "mkdir -p /app/data && export DATABASE_URL=file:/app/data/qrioo.db && npx prisma db push --skip-generate 2>/dev/null || true && exec node .next/standalone/server.js"
