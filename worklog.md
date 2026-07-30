@@ -100,6 +100,32 @@ Stage Summary:
 - Dev script updated: --webpack flag for Prisma compatibility
 - Full E2E flow verified: seed → fill form → submit → success banner → reset → repeat
 ---
+Task ID: 10
+Agent: Main
+Task: Étape 4 upgrade - Real PDF generation + Dashboard API
+
+Work Log:
+- Installed jspdf@4.2.1 + @types/jspdf for binary PDF generation
+- Rewrote /api/batches/[id]/pdf/route.ts: replaced HTML output with real A4 PDF using jsPDF
+  - 4x4 QR grid per page (16 per page), multi-page support
+  - Colored header bar per pack_type with batch name, pack label, page numbers
+  - QR codes rendered from PNG buffers, with reference text + status badge per cell
+  - Footer with generation date and Qrioo branding
+  - Proper Content-Disposition: attachment for download
+- Created /api/dashboard/route.ts for Étape 5 KPIs:
+  - Total tags, activated, batches, scans, activation rate
+  - Pack breakdown (groupBy packType)
+  - Daily activity (14-day window: created + scanned per day)
+  - Recent batches (last 5) with tag counts
+  - Recent scans (last 8) with reference, packType, location
+
+Stage Summary:
+- PDF: src/app/api/batches/[id]/pdf/route.ts (real binary PDF via jsPDF, 200, 541KB for 20 tags / 2 pages)
+- CSV: src/app/api/batches/[id]/csv/route.ts (unchanged, working)
+- Dashboard: src/app/api/dashboard/route.ts (new, all KPIs)
+- Verified: 0 console errors, all routes 200, PDF is valid PDF v1.3, CSV has 20 rows + header
+- Full E2E: create batch → PDF download (binary) → CSV download → dashboard KPIs
+---
 Task ID: 9
 Agent: Main
 Task: Étape 4 - Génération de lots (Batches) avec export PDF/CSV

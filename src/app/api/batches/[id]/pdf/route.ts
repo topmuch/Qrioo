@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateQRDataUrl, PACK_COLORS } from '@/lib/qr';
+import { generateQRBuffer, PACK_COLORS } from '@/lib/qr';
 
 const QR_PER_ROW = 4;
-const QR_PER_PAGE = 16; // 4x4 grid on A4
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
-const QR_SIZE = 140;
-const CELL_W = A4_WIDTH_PX / QR_PER_ROW;
-const CELL_H = A4_HEIGHT_PX / 4;
+const QR_PER_COL = 4;
+const QR_PER_PAGE = QR_PER_ROW * QR_PER_COL; // 16
 
 const PACK_LABELS: Record<string, string> = {
   pratique: 'Pack Pratique',
@@ -47,68 +43,138 @@ export async function GET(
     const colors = PACK_COLORS[batch.packType] || PACK_COLORS.pratique;
     const packLabel = PACK_LABELS[batch.packType] || batch.packType;
 
-    // Generate QR data URLs for all tags
-    const qrDataUrls = await Promise.all(
-      tags.map((tag) => generateQRDataUrl({ reference: tag.reference, packType: batch.packType, size: QR_SIZE }))
+    // Dynamically import jspdf (server-side only)
+    const { jsPDF } = await import('jspdf');
+
+    // A4 dimensions in mm
+    const PAGE_W = 210;
+    const PAGE_H = 297;
+    const MARGIN = 12;
+    const HEADER_H = 18;
+    const FOOTER_H = 10;
+    const CONTENT_TOP = MARGIN + HEADER_H;
+    const CONTENT_H = PAGE_H - CONTENT_TOP - MARGIN - FOOTER_H;
+
+    const contentW = PAGE_W - 2 * MARGIN;
+    const cellW = contentW / QR_PER_ROW;
+    const cellH = CONTENT_H / QR_PER_COL;
+    const qrSize = Math.min(cellW, cellH) * 0.52;
+
+    // Generate QR buffers
+    const qrBuffers = await Promise.all(
+      tags.map((tag) => generateQRBuffer({ reference: tag.reference, packType: batch.packType, size: Math.round(qrSize * 3.78) }))
     );
 
-    // Build HTML pages (A4 printable)
-    const pages: string[] = [];
+    // Convert hex to RGB
+    function hexToRgb(hex: string): [number, number, number] {
+      const h = hex.replace('#', '');
+      return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
+    }
+
+    const [accentR, accentG, accentB] = hexToRgb(colors.dark);
     const totalPages = Math.ceil(tags.length / QR_PER_PAGE);
 
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
     for (let p = 0; p < totalPages; p++) {
+      if (p > 0) doc.addPage();
+
       const startIdx = p * QR_PER_PAGE;
       const pageTags = tags.slice(startIdx, startIdx + QR_PER_PAGE);
-      const pageQrs = qrDataUrls.slice(startIdx, startIdx + QR_PER_PAGE);
 
-      let cellsHtml = '';
+      // ─── Header ───
+      doc.setFillColor(accentR, accentG, accentB);
+      doc.rect(0, 0, PAGE_W, HEADER_H + MARGIN, 'F');
+
+      // White title text on colored bar
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(batch.name, MARGIN, MARGIN + 6);
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${packLabel}`, MARGIN, MARGIN + 12);
+
+      // Page info (right aligned)
+      doc.setFontSize(8);
+      doc.text(
+        `Page ${p + 1}/${totalPages}  |  ${tags.length} QR codes`,
+        PAGE_W - MARGIN, MARGIN + 9,
+        { align: 'right' }
+      );
+
+      // Qrioo branding
+      doc.setFontSize(7);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Qrioo', PAGE_W - MARGIN, MARGIN + 14, { align: 'right' });
+
+      // ─── Grid cells ───
       for (let i = 0; i < pageTags.length; i++) {
         const col = i % QR_PER_ROW;
         const row = Math.floor(i / QR_PER_ROW);
-        const x = col * CELL_W;
-        const y = row * CELL_H;
         const tag = pageTags[i];
-        const qr = pageQrs[i];
-        const ref = tag.reference;
-        const statusLabel = tag.status === 'activated' ? 'Activé' : 'En stock';
-        const statusBg = tag.status === 'activated' ? '#DCFCE7' : '#FEF3C7';
+        const qrBuf = qrBuffers[startIdx + i];
 
-        cellsHtml += `
-          <div style="position:absolute;left:${x}px;top:${y}px;width:${CELL_W}px;height:${CELL_H}px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;">
-            <div style="width:${QR_SIZE}px;height:${QR_SIZE}px;border-radius:8px;overflow:hidden;border:2px solid ${colors.dark};box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-              <img src="${qr}" width="${QR_SIZE}" height="${QR_SIZE}" style="display:block;" />
-            </div>
-            <p style="font-family:monospace;font-size:11px;font-weight:bold;color:${colors.dark};margin:6px 0 2px;">${ref}</p>
-            <span style="font-size:9px;padding:2px 8px;border-radius:10px;background:${statusBg};color:${colors.dark};font-weight:600;">${statusLabel}</span>
-          </div>`;
+        const cellX = MARGIN + col * cellW;
+        const cellY = CONTENT_TOP + row * cellH;
+        const centerX = cellX + cellW / 2;
+
+        // Cell border (subtle)
+        doc.setDrawColor(230, 230, 230);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(cellX + 1, cellY + 1, cellW - 2, cellH - 2, 2, 2, 'S');
+
+        // QR code image
+        const qrBase64 = `data:image/png;base64,${qrBuf.toString('base64')}`;
+        const qrX = centerX - qrSize / 2;
+        const qrY = cellY + (cellH - qrSize) / 2 - 3;
+        doc.addImage(qrBase64, 'PNG', qrX, qrY, qrSize, qrSize);
+
+        // Reference text
+        doc.setTextColor(accentR, accentG, accentB);
+        doc.setFontSize(7.5);
+        doc.setFont('courier', 'bold');
+        doc.text(tag.reference, centerX, qrY + qrSize + 4.5, { align: 'center' });
+
+        // Status badge
+        const statusText = tag.status === 'activated' ? 'Active' : 'En stock';
+        const badgeW = doc.getTextWidth(statusText) + 6;
+        const badgeX = centerX - badgeW / 2;
+        const badgeY = qrY + qrSize + 5.5;
+
+        if (tag.status === 'activated') {
+          doc.setFillColor(220, 252, 231);
+          doc.setTextColor(21, 128, 61);
+        } else {
+          doc.setFillColor(254, 243, 199);
+          doc.setTextColor(146, 64, 14);
+        }
+        doc.roundedRect(badgeX, badgeY, badgeW, 4, 1.5, 1.5, 'F');
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        doc.text(statusText, centerX, badgeY + 3, { align: 'center' });
       }
 
-      pages.push(`
-        <div style="width:${A4_WIDTH_PX}px;height:${A4_HEIGHT_PX}px;position:relative;page-break-after:always;box-sizing:border-box;padding:30px;">
-          ${cellsHtml}
-        </div>`);
+      // ─── Footer ───
+      doc.setTextColor(180, 180, 180);
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      const dateStr = new Date().toLocaleDateString('fr-FR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+      doc.text(`Genere le ${dateStr}  |  qrioo.com  |  Lot: ${batch.id}`, PAGE_W / 2, PAGE_H - 4, { align: 'center' });
     }
 
-    const fullHtml = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${batch.name} - Qrioo</title>
-<style>
-  @page { size: A4; margin: 0; }
-  body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-</style></head>
-<body>
-  <div style="padding:20px;font-size:11px;color:#666;display:flex;justify-content:space-between;">
-    <span><strong>${batch.name}</strong> — ${packLabel}</span>
-    <span>Qrioo — ${new Date().toLocaleDateString('fr-FR')}</span>
-    <span>${tags.length} QR codes — Page 1/${totalPages}</span>
-  </div>
-  ${pages.join('\n')}
-</body></html>`;
+    const pdfBytes = doc.output('arraybuffer');
+    const filename = `qrioo-${batch.name.replace(/\s+/g, '-')}.pdf`;
 
-    return new NextResponse(fullHtml, {
+    return new NextResponse(pdfBytes, {
       status: 200,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Disposition': `inline; filename="qrioo-${batch.name.replace(/\s+/g, '-')}.html"`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+        'Content-Length': String(pdfBytes.byteLength),
       },
     });
   } catch (error) {

@@ -1,0 +1,500 @@
+   900→                  <span>{pack.title}</span>
+   901→                  <code className="text-[10px] font-mono opacity-60 ml-1">{ref}</code>
+   902→                </button>
+   903→              );
+   904→            })}
+   905→          </div>
+   906→
+   907→          {/* Success / Error banners */}
+   908→          <AnimatePresence mode="wait">
+   909→            {activateSuccess && (
+   910→              <motion.div
+   911→                key="success"
+   912→                initial={{ opacity: 0, y: -10 }}
+   913→                animate={{ opacity: 1, y: 0 }}
+   914→                exit={{ opacity: 0, y: -10 }}
+   915→                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3"
+   916→              >
+   917→                <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+   918→                <div className="flex-1">
+   919→                  <p className="text-sm font-bold text-emerald-800">Activation réussie</p>
+   920→                  <p className="text-xs text-emerald-700 mt-0.5">{activateSuccess}</p>
+   921→                </div>
+   922→                <button
+   923→                  type="button"
+   924→                  onClick={() => handleResetTag(activateTab)}
+   925→                  className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium whitespace-nowrap"
+   926→                >
+   927→                  <RotateCcw className="w-3 h-3" />
+   928→                  Réinitialiser
+   929→                </button>
+   930→              </motion.div>
+   931→            )}
+   932→            {activateError && (
+   933→              <motion.div
+   934→                key="error"
+   935→                initial={{ opacity: 0, y: -10 }}
+   936→                animate={{ opacity: 1, y: 0 }}
+   937→                exit={{ opacity: 0, y: -10 }}
+   938→                className="max-w-lg mx-auto mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3"
+   939→              >
+   940→                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+   941→                <div>
+   942→                  <p className="text-sm font-bold text-red-800">Erreur</p>
+   943→                  <p className="text-xs text-red-700 mt-0.5">{activateError}</p>
+   944→                </div>
+   945→              </motion.div>
+   946→            )}
+   947→          </AnimatePresence>
+   948→
+   949→          {/* Activation form (switched by tab) */}
+   950→          <div className="max-w-lg mx-auto">
+   951→            <AnimatePresence mode="wait">
+   952→              <motion.div
+   953→                key={activateTab}
+   954→                initial={{ opacity: 0, x: 20 }}
+   955→                animate={{ opacity: 1, x: 0 }}
+   956→                exit={{ opacity: 0, x: -20 }}
+   957→                transition={{ duration: 0.25 }}
+   958→              >
+   959→                {activateTab === 'pratique' && (
+   960→                  <ActivatePratique
+   961→                    onSubmit={(data) => handleActivate('pratique', data as unknown as Record<string, unknown>)}
+   962→                    isLoading={activateLoading}
+   963→                  />
+   964→                )}
+   965→                {activateTab === 'emotion' && (
+   966→                  <ActivateEmotion
+   967→                    onSubmit={(data) => handleActivate('emotion', data as unknown as Record<string, unknown>)}
+   968→                    isLoading={activateLoading}
+   969→                  />
+   970→                )}
+   971→                {activateTab === 'evenementiel' && (
+   972→                  <ActivateEvenementiel
+   973→                    onSubmit={(data) => handleActivate('evenementiel', data as unknown as Record<string, unknown>)}
+   974→                    isLoading={activateLoading}
+   975→                  />
+   976→                )}
+   977→                {activateTab === 'immobilier' && (
+   978→                  <ActivateImmobilier
+   979→                    onSubmit={(data) => handleActivate('immobilier', data as unknown as Record<string, unknown>)}
+   980→                    isLoading={activateLoading}
+   981→                  />
+   982→                )}
+   983→              </motion.div>
+   984→            </AnimatePresence>
+   985→          </div>
+   986→
+   987→          {/* Architecture note */}
+   988→          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="mt-12 max-w-4xl mx-auto">
+   989→            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 overflow-x-auto">
+   990→              <div className="flex items-center gap-2 mb-4">
+   991→                <Code className="w-4 h-4 text-purple-600" />
+   992→                <h3 className="text-sm font-bold text-gray-700">Architecture : Validation par pack_type</h3>
+   993→              </div>
+   994→              <pre className="text-sm font-mono text-gray-800 whitespace-pre leading-relaxed">{`// ─── API Route : /api/activate/[reference] ───
+   995→
+   996→switch (packType) {
+   997→  case 'pratique':
+   998→    // → Zod : travelerFirstName, travelerLastName, whatsappOwner
+   999→    // → Stocke : customData JSON (category, brand, model...)
+  1000→    validate(pratiqueSchema)
+  1001→    break;
+  1002→
+  1003→  case 'emotion':
+  1004→    // → Zod : senderName, recipientName, contentType (text|audio)
+  1005→    // → Stocke : contentMetadata + contentType + contentUrl
+  1006→    validate(emotionSchema)
+  1007→    break;
+  1008→
+  1009→  case 'evenementiel':
+  1010→    // → Zod : eventName, eventDate, hostName, guestBookEnabled
+  1011→    // → Stocke : contentMetadata JSON
+  1012→    validate(evenementielSchema)
+  1013→    break;
+  1014→
+  1015→  case 'immobilier':
+  1016→    // → Zod : propertyTitle, propertyType, price, city
+  1017→    // → Stocke : contentMetadata JSON (photos[], features[])
+  1018→    validate(immobilierSchema)
+  1019→    break;
+  1020→}`}</pre>
+  1021→            </div>
+  1022→          </motion.div>
+  1023→        </div>
+  1024→      </section>
+  1025→
+  1026→      {/* ═══════════════════════════════════════════════════════════════
+  1027→           ÉTAPE 4 : GÉNÉRATION DE LOTS (BATCHES)
+  1028→           ═══════════════════════════════════════════════════════════════ */}
+  1029→      <section className="py-16 px-4 bg-white">
+  1030→        <div className="max-w-5xl mx-auto">
+  1031→          {/* Header */}
+  1032→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+  1033→            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold tracking-wider uppercase mb-4">
+  1034→              <Layers className="w-3.5 h-3.5" />
+  1035→              Étape 4
+  1036→            </div>
+  1037→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">
+  1038→              Génération de Lots
+  1039→            </h2>
+  1040→            <p className="text-gray-600 max-w-2xl mx-auto">
+  1041→              Créez des lots de QR codes par pack_type. Chaque lot génère des références uniques
+  1042→              et permet l'export en <strong>PDF imprimable</strong> (grille A4) et <strong>CSV</strong>.
+  1043→            </p>
+  1044→          </motion.div>
+  1045→
+  1046→          {/* Create batch form */}
+  1047→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+  1048→            className="max-w-2xl mx-auto bg-gray-50 rounded-2xl border border-gray-200 p-6 mb-10">
+  1049→            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+  1050→              <Plus className="w-5 h-5 text-amber-600" /> Nouveau lot
+  1051→            </h3>
+  1052→            <div className="grid sm:grid-cols-3 gap-4 mb-4">
+  1053→              <div className="sm:col-span-1">
+  1054→                <label className="block text-sm font-bold text-gray-700 mb-1">Nom du lot *</label>
+  1055→                <input
+  1056→                  type="text" value={batchName} onChange={(e) => setBatchName(e.target.value)}
+  1057→                  placeholder="Ex: Lot Agence Azur"
+  1058→                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+  1059→                />
+  1060→              </div>
+  1061→              <div>
+  1062→                <label className="block text-sm font-bold text-gray-700 mb-1">Pack Type</label>
+  1063→                <select
+  1064→                  value={batchPackType} onChange={(e) => setBatchPackType(e.target.value as PackType)}
+  1065→                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+  1066→                >
+  1067→                  {PACKS.map((p) => (
+  1068→                    <option key={p.id} value={p.id}>{p.title} ({p.subtitle})</option>
+  1069→                  ))}
+  1070→                </select>
+  1071→              </div>
+  1072→              <div>
+  1073→                <label className="block text-sm font-bold text-gray-700 mb-1">Quantité</label>
+  1074→                <input
+  1075→                  type="number" min={1} max={500} value={batchQuantity} onChange={(e) => setBatchQuantity(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+  1076→                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+  1077→                />
+  1078→                <p className="text-xs text-gray-400 mt-1">Grille A4 : 16 par page</p>
+  1079→              </div>
+  1080→            </div>
+  1081→            {/* Feedback */}
+  1082→            {batchSuccess && (
+  1083→              <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 mb-4">
+  1084→                <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> {batchSuccess}
+  1085→              </div>
+  1086→            )}
+  1087→            {batchError && (
+  1088→              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800 mb-4">
+  1089→                <AlertCircle className="w-4 h-4 flex-shrink-0" /> {batchError}
+  1090→              </div>
+  1091→            )}
+  1092→            <button
+  1093→              type="button" onClick={handleCreateBatch} disabled={batchCreating || !batchName.trim()}
+  1094→              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+  1095→            >
+  1096→              {batchCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+  1097→              {batchCreating ? 'Génération en cours...' : 'Générer le lot'}
+  1098→            </button>
+  1099→          </motion.div>
+  1100→
+  1101→          {/* Batches list */}
+  1102→          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}>
+  1103→            <div className="flex items-center justify-between mb-4">
+  1104→              <h3 className="text-lg font-bold text-gray-800">Lots générés</h3>
+  1105→              <button type="button" onClick={fetchBatches} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+  1106→                <RotateCcw className="w-3.5 h-3.5" /> Rafraîchir
+  1107→              </button>
+  1108→            </div>
+  1109→
+  1110→            {batchesLoading ? (
+  1111→              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  1112→            ) : batches.length === 0 ? (
+  1113→              <div className="text-center py-12 text-gray-400">
+  1114→                <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
+  1115→                <p className="text-sm">Aucun lot généré. Créez votre premier lot ci-dessus.</p>
+  1116→              </div>
+  1117→            ) : (
+  1118→              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+  1119→                {batches.map((b) => {
+  1120→                  const packInfo = PACKS.find((p) => p.id === b.packType);
+  1121→                  const inStock = b.statusCounts?.in_stock || 0;
+  1122→                  const activated = b.statusCounts?.activated || 0;
+  1123→                  return (
+  1124→                    <div key={b.id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+  1125→                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+  1126→                        style={{ backgroundColor: (packInfo?.color || '#999') + '20' }}>
+  1127→                        {packInfo?.icon}
+  1128→                      </div>
+  1129→                      <div className="flex-1 min-w-0">
+  1130→                        <div className="flex items-center gap-2 flex-wrap">
+  1131→                          <p className="font-bold text-gray-800 text-sm truncate">{b.name}</p>
+  1132→                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+  1133→                            style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
+  1134→                            {packInfo?.title}
+  1135→                          </span>
+  1136→                        </div>
+  1137→                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+  1138→                          <span>{b.tagCount} tags</span>
+  1139→                          <span className="text-amber-600 font-semibold">{inStock} en stock</span>
+  1140→                          <span className="text-emerald-600 font-semibold">{activated} activés</span>
+  1141→                          <span>{new Date(b.createdAt).toLocaleDateString('fr-FR')}</span>
+  1142→                        </div>
+  1143→                      </div>
+  1144→                      <div className="flex items-center gap-2 flex-shrink-0">
+  1145→                        <a href={`/api/batches/${b.id}/pdf`} target="_blank" rel="noreferrer"
+  1146→                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all">
+  1147→                          <FileText className="w-3.5 h-3.5" /> PDF
+  1148→                        </a>
+  1149→                        <a href={`/api/batches/${b.id}/csv`} download
+  1150→                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all">
+  1151→                          <Download className="w-3.5 h-3.5" /> CSV
+  1152→                        </a>
+  1153→                      </div>
+  1154→                    </div>
+  1155→                  );
+  1156→                })}
+  1157→              </div>
+  1158→            )}
+  1159→          </motion.div>
+  1160→        </div>
+  1161→      </section>
+  1162→
+  1163→      {/* ═══════════════════════════════════════════════════════════════
+  1164→           ÉTAPE 5 : DASHBOARD QRIOO
+  1165→           ═══════════════════════════════════════════════════════════════ */}
+  1166→      <section className="py-16 px-4 bg-gradient-to-b from-gray-50 to-white">
+  1167→        <div className="max-w-5xl mx-auto">
+  1168→          {/* Header */}
+  1169→          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
+  1170→            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold tracking-wider uppercase mb-4">
+  1171→              <BarChart3 className="w-3.5 h-3.5" />
+  1172→              Étape 5
+  1173→            </div>
+  1174→            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Dashboard Qrioo</h2>
+  1175→            <p className="text-gray-600 max-w-2xl mx-auto">
+  1176→              Vue d'ensemble en temps réel : KPIs multi-packs, répartition par type, activité quotidienne, lots et scans récents.
+  1177→            </p>
+  1178→          </motion.div>
+  1179→
+  1180→          {dashLoading ? (
+  1181→            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  1182→              {[...Array(4)].map((_, i) => (
+  1183→                <div key={i} className="bg-gray-200 rounded-2xl h-28 animate-pulse" />
+  1184→              ))}
+  1185→            </div>
+  1186→          ) : dash ? (
+  1187→            <>
+  1188→              {/* KPI Cards */}
+  1189→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  1190→                {[
+  1191→                  { label: 'Total QR Codes', value: (dash.totalTags as number) || 0, sub: `${(dash.totalActivated as number) || 0} activés`, icon: <QrCode className="w-5 h-5 text-white" />, gradient: 'from-violet-600 to-purple-600' },
+  1192→                  { label: 'Taux d\'activation', value: `${(dash.activationRate as number) || 0}%`, sub: `${(dash.totalTags as number) || 0} tags`, icon: <TrendingUp className="w-5 h-5 text-white" />, gradient: 'from-emerald-500 to-teal-600' },
+  1193→                  { label: 'Total Scans', value: (dash.totalScans as number) || 0, sub: 'Tous packs confondus', icon: <Eye className="w-5 h-5 text-white" />, gradient: 'from-amber-500 to-orange-500' },
+  1194→                  { label: 'Lots générés', value: (dash.totalBatches as number) || 0, sub: `${(dash.totalBatchTags as number) || 0} tags`, icon: <Layers className="w-5 h-5 text-white" />, gradient: 'from-slate-600 to-slate-800' },
+  1195→                ].map((kpi, i) => (
+  1196→                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+  1197→                    className="rounded-2xl p-5 text-white shadow-lg"
+  1198→                    style={{ background: `linear-gradient(135deg, ${kpi.gradient})` }}
+  1199→                  >
+  1200→                    <div className="flex items-center justify-between mb-3">
+  1201→                      <span className="text-xs font-semibold text-white/70 uppercase tracking-wider">{kpi.label}</span>
+  1202→                      <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">{kpi.icon}</div>
+  1203→                    </div>
+  1204→                    <p className="text-3xl font-black">{kpi.value}</p>
+  1205→                    <p className="text-xs text-white/70 mt-1">{kpi.sub}</p>
+  1206→                  </motion.div>
+  1207→                ))}
+  1208→              </div>
+  1209→
+  1210→              {/* Charts row */}
+  1211→              <div className="grid lg:grid-cols-2 gap-6 mb-8">
+  1212→                {/* Pie chart: pack breakdown */}
+  1213→                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+  1214→                  className="bg-white rounded-2xl border border-gray-200 p-6">
+  1215→                  <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+  1216→                    <PieChart className="w-4 h-4 text-indigo-500" /> Répartition par Pack
+  1217→                  </h3>
+  1218→                  <div className="flex items-center gap-6">
+  1219→                    {/* CSS Pie Chart */}
+  1220→                    <div className="relative w-32 h-32 flex-shrink-0">
+  1221→                      <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+  1222→                        {(() => {
+  1223→                          const pb = (dash.packBreakdown as Record<string, number>) || {};
+  1224→                          const total = Object.values(pb).reduce((s, v) => s + v, 0) || 1;
+  1225→                          const COLORS = ['#E3B23C', '#7C3AED', '#059669', '#475569'];
+  1226→                          const LABELS: Record<string, string> = { pratique: 'Pratique', emotion: 'Emotion', evenementiel: 'Événement', immobilier: 'Immobilier' };
+  1227→                          const types = ['pratique', 'emotion', 'evenementiel', 'immobilier'];
+  1228→                          let cumPct = 0;
+  1229→                          return types.map((t, idx) => {
+  1230→                            const pct = ((pb[t] || 0) / total) * 100;
+  1231→                            const strokeDash = pct > 0 ? `${(pct / 100) * 100} ${100 - (pct / 100) * 100}` : '0 100';
+  1232→                            const r = 15.915;
+  1233→                            const offset = idx === 0 ? 0 : (cumPct / 100) * 2 * Math.PI;
+  1234→                            cumPct += pct;
+  1235→                            return (
+  1236→                              <circle key={t} cx="18" cy="18" r={r} fill="none" stroke={COLORS[idx]} strokeWidth="5"
+  1237→                                strokeDasharray={strokeDash} strokeDashoffset={offset} />
+  1238→                            );
+  1239→                          });
+  1240→                        })()}
+  1241→                      </svg>
+  1242→                      <div className="absolute inset-0 flex items-center justify-center">
+  1243→                        <div className="text-center">
+  1244→                          <p className="text-lg font-black text-gray-800">{(dash.totalTags as number) || 0}</p>
+  1245→                          <p className="text-[10px] text-gray-400">tags</p>
+  1246→                        </div>
+  1247→                      </div>
+  1248→                    </div>
+  1249→                    {/* Legend */}
+  1250→                    <div className="space-y-2.5 flex-1">
+  1251→                      {['pratique', 'emotion', 'evenementiel', 'immobilier'].map((t, i) => {
+  1252→                        const pb = (dash.packBreakdown as Record<string, number>) || {};
+  1253→                        const total = Object.values(pb).reduce((s, v) => s + v, 0) || 1;
+  1254→                        const pct = Math.round(((pb[t] || 0) / total) * 100);
+  1255→                        const colors = ['#E3B23C', '#7C3AED', '#059669', '#475569'];
+  1256→                        const labels = ['Pratique', 'Emotion', 'Événementiel', 'Immobilier'];
+  1257→                        return (
+  1258→                          <div key={t} className="flex items-center justify-between">
+  1259→                            <div className="flex items-center gap-2">
+  1260→                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[i] }} />
+  1261→                              <span className="text-sm text-gray-700">{labels[i]}</span>
+  1262→                            </div>
+  1263→                            <div className="flex items-center gap-3">
+  1264→                              <span className="text-xs font-bold text-gray-800 w-8 text-right">{pb[t] || 0}</span>
+  1265→                              <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+  1266→                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: colors[i] }} />
+  1267→                              </div>
+  1268→                              <span className="text-xs text-gray-400 w-8">{pct}%</span>
+  1269→                            </div>
+  1270→                          </div>
+  1271→                        );
+  1272→                      })}
+  1273→                    </div>
+  1274→                  </div>
+  1275→                </motion.div>
+  1276→
+  1277→                {/* Bar chart: daily activity */}
+  1278→                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+  1279→                  className="bg-white rounded-2xl border border-gray-200 p-6">
+  1280→                  <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+  1281→                    <Activity className="w-4 h-4 text-indigo-500" /> Activité (14 jours)
+  1282→                  </h3>
+  1283→                  <div className="h-44 flex items-end gap-1">
+  1284→                    {((dash.dailyActivity as Array<{ date: string; created: number; scanned: number }>) || []).map((d, i) => {
+  1285→                      const maxCreated = Math.max(...((dash.dailyActivity as Array<{ created: number }>) || []).map(x => x.created), 1);
+  1286→                      const hCreated = Math.max((d.created / maxCreated) * 100, 4);
+  1287→                      const hScanned = Math.max((d.scanned / maxCreated) * 60, 2);
+  1288→                      const label = d.date.slice(5);
+  1289→                      return (
+  1290→                        <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5">
+  1291→                          <div className="w-full flex flex-col items-center justify-end" style={{ height: '140px' }}>
+  1292→                            <div className="w-full max-w-[20px] rounded-t bg-indigo-500 transition-all" style={{ height: `${hCreated}%` }} title={`${d.created} créés`} />
+  1293→                            <div className="w-full max-w-[20px] rounded-t bg-amber-400 transition-all" style={{ height: `${hScanned}%` }} title={`${d.scanned} scannés`} />
+  1294→                          </div>
+  1295→                          <span className="text-[10px] text-gray-400">{label}</span>
+  1296→                        </div>
+  1297→                      );
+  1298→                    })}
+  1299→                  </div>
+  1300→                  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+  1301→                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-indigo-500" /><span className="text-[10px] text-gray-500">Créés</span></div>
+  1302→                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-400" /><span className="text-[10px] text-gray-500">Scannés</span></div>
+  1303→                  </div>
+  1304→                </motion.div>
+  1305→              </div>
+  1306→
+  1307→              {/* Recent activity row */}
+  1308→              <div className="grid lg:grid-cols-2 gap-6">
+  1309→                {/* Recent batches */}
+  1310→                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+  1311→                  className="bg-white rounded-2xl border border-gray-200 p-6">
+  1312→                  <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+  1313→                    <Layers className="w-4 h-4 text-indigo-500" /> Lots récents
+  1314→                  </h3>
+  1315→                  {((dash.recentBatches as Array<Record<string, unknown>>) || []).length === 0 ? (
+  1316→                    <p className="text-sm text-gray-400 text-center py-6">Aucun lot</p>
+  1317→                  ) : (
+  1318→                    <div className="space-y-2 max-h-48 overflow-y-auto">
+  1319→                      {(dash.recentBatches as Array<Record<string, unknown>>).map((b) => {
+  1320→                        const packInfo = PACKS.find((p) => p.id === b.packType);
+  1321→                        return (
+  1322→                          <div key={b.id as string} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+  1323→                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
+  1324→                              {packInfo?.icon}
+  1325→                            </div>
+  1326→                            <div className="flex-1 min-w-0">
+  1327→                              <p className="text-sm font-semibold text-gray-800 truncate">{b.name as string}</p>
+  1328→                              <p className="text-xs text-gray-400">{(b.tagCount as number)} tags · {packInfo?.subtitle}</p>
+  1329→                            </div>
+  1330→                          </div>
+  1331→                        );
+  1332→                      })}
+  1333→                    </div>
+  1334→                  )}
+  1335→                </motion.div>
+  1336→
+  1337→                {/* Recent scans */}
+  1338→                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+  1339→                  className="bg-white rounded-2xl border border-gray-200 p-6">
+  1340→                  <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+  1341→                    <Eye className="w-4 h-4 text-indigo-500" /> Scans récents
+  1342→                  </h3>
+  1343→                  {((dash.recentScans as Array<Record<string, unknown>>) || []).length === 0 ? (
+  1344→                    <p className="text-sm text-gray-400 text-center py-6">Aucun scan</p>
+  1345→                  ) : (
+  1346→                    <div className="space-y-2 max-h-48 overflow-y-auto">
+  1347→                      {(dash.recentScans as Array<Record<string, unknown>>).map((s) => {
+  1348→                        const packInfo = PACKS.find((p) => p.id === s.packType);
+  1349→                        return (
+  1350→                          <div key={s.id as string} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+  1351→                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
+  1352→                              {packInfo?.icon}
+  1353→                            </div>
+  1354→                            <div className="flex-1 min-w-0">
+  1355→                              <p className="text-sm font-semibold text-gray-800 font-mono">{s.reference as string}</p>
+  1356→                              <p className="text-xs text-gray-400">{packInfo?.subtitle}{s.location ? ` · ${s.location}` : ''}</p>
+  1357→                            </div>
+  1358→                            <span className="text-[10px] text-gray-400 whitespace-nowrap">{new Date(s.createdAt as string).toLocaleDateString('fr-FR')}</span>
+  1359→                          </div>
+  1360→                        );
+  1361→                      })}
+  1362→                    </div>
+  1363→                  )}
+  1364→                </motion.div>
+  1365→              </div>
+  1366→            </>
+  1367→          ) : (
+  1368→            <p className="text-center text-gray-400 py-12">Erreur de chargement du dashboard</p>
+  1369→          )}
+  1370→        </div>
+  1371→      </section>
+  1372→
+  1373→      {/* ─── FOOTER ─── */}
+  1374→      <footer className="bg-gray-900 text-white py-10 px-4 mt-auto">
+  1375→        <div className="max-w-6xl mx-auto">
+  1376→          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+  1377→            <div className="flex items-center gap-3">
+  1378→              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: QRIOO_PURPLE }}>
+  1379→                <QrCode className="w-5 h-5 text-white" />
+  1380→              </div>
+  1381→              <div>
+  1382→                <p className="font-black text-lg">Qrioo</p>
+  1383→                <p className="text-xs text-gray-400">QR Codes Dynamiques Multi-Usages</p>
+  1384→              </div>
+  1385→            </div>
+  1386→            <p className="text-sm text-gray-500">
+  1387→              Refonte de QRTags en plateforme SaaS multi-usage
+  1388→            </p>
+  1389→            <div className="flex items-center gap-2">
+  1390→              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: QRIOO_PURPLE }} />
+  1391→              <span className="text-xs text-gray-500">Étapes 1 à 5 : Complet — Qrioo SaaS Multi-Packs</span>
+  1392→            </div>
+  1393→          </div>
+  1394→        </div>
+  1395→      </footer>
+  1396→    </div>
+  1397→  );
+  1398→}
+  1399→
