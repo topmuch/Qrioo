@@ -1,0 +1,948 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useCallback, useMemo } from 'react';
+     4→import {
+     5→  AlertCircle, Clock, Shield, Sparkles,
+     6→  MapPin, Loader2, CheckCircle2, ArrowLeft, RefreshCw,
+     7→  Package, Gift, MessageCircle, User, Phone, Navigation,
+     8→  ChevronDown, ExternalLink, Zap, ShieldCheck,
+     9→} from 'lucide-react';
+    10→import QRTagsLogo from '@/components/qrtags/QRTagsLogo';
+    11→import PhoneInput from '@/components/ui/PhoneInput';
+    12→import { getDialCode, normalizePhone } from '@/lib/phone';
+    13→
+    14→// ─── Design tokens QRTags (fond jaune moutarde + cartes blanches) ───
+    15→const QRTAGS_BG       = '#E3B23C';
+    16→const QRTAGS_INK      = '#111111';
+    17→const QRTAGS_RED      = '#DC2626';
+    18→const QRTAGS_GREEN    = '#16A34A';
+    19→const CARD_CLASS      = 'bg-white rounded-xl p-6 shadow-xl border-2 border-black';
+    20→const INPUT_CLASS     =
+    21→  'w-full min-h-[48px] px-4 py-3 border-2 border-black rounded-lg bg-gray-50 text-black placeholder-gray-400 focus:outline-none focus:border-[#E3B23C] focus:ring-2 focus:ring-[#E3B23C] transition text-base';
+    22→
+    23→interface ObjectInfo {
+    24→  category?: string | null;
+    25→  category_label?: string | null;
+    26→  object_name?: string | null;
+    27→  object_description?: string | null;
+    28→  brand?: string | null;
+    29→  model?: string | null;
+    30→  color?: string | null;
+    31→  reward?: string | null;
+    32→  message_to_finder?: string | null;
+    33→  city?: string | null;
+    34→  country?: string | null;
+    35→  photo?: string | null;
+    36→}
+    37→
+    38→interface BaggageData {
+    39→  reference: string;
+    40→  type: string;
+    41→  travelerName: string;
+    42→  travelerFirstName?: string | null;
+    43→  status: string;
+    44→  agency?: string | null;
+    45→  whatsappOwner?: string | null;
+    46→  declaredLostAt?: string | null;
+    47→  foundAt?: string | null;
+    48→  createdAt?: string | null;
+    49→  isLost?: boolean;
+    50→  objectInfo?: ObjectInfo | null;
+    51→}
+    52→
+    53→type GpsStatus = 'idle' | 'loading' | 'success' | 'error';
+    54→
+    55→// ─── Icônes par catégorie d'objet (emoji pour universalité) ───
+    56→const CATEGORY_ICONS: Record<string, string> = {
+    57→  electronics:    '📱',
+    58→  phone:          '📱',
+    59→  laptop:         '💻',
+    60→  computer:       '💻',
+    61→  tablet:         '📱',
+    62→  travel:         '🧳',
+    63→  luggage:        '🧳',
+    64→  suitcase:       '🧳',
+    65→  bag:            '🎒',
+    66→  backpack:       '🎒',
+    67→  handbag:        '👜',
+    68→  documents:      '📄',
+    69→  passport:       '📄',
+    70→  id:             '🪪',
+    71→  wallet:         '👛',
+    72→  keys:           '🔑',
+    73→  keychain:       '🔑',
+    74→  glasses:        '👓',
+    75→  sunglasses:     '🕶️',
+    76→  watch:          '⌚',
+    77→  jewelry:        '💍',
+    78→  clothing:       '👕',
+    79→  jacket:         '🧥',
+    80→  coat:           '🧥',
+    81→  bicycle:        '🚲',
+    82→  vehicle:        '🚗',
+    83→  car:            '🚗',
+    84→  motorcycle:     '🏍️',
+    85→  pet:            '🐾',
+    86→  musical:        '🎸',
+    87→  instrument:     '🎸',
+    88→  camera:         '📷',
+    89→  sport:          '⚽',
+    90→  baby:           '🧸',
+    91→  kids:           '🧸',
+    92→  toys:           '🧸',
+    93→  medical:        '💊',
+    94→  medication:     '💊',
+    95→  tools:          '🔧',
+    96→  other:          '📦',
+    97→  general:        '📦',
+    98→};
+    99→
+   100→function getCategoryIcon(category?: string | null): string {
+   101→  if (!category) return '📦';
+   102→  const key = category.toLowerCase().trim();
+   103→  for (const [k, v] of Object.entries(CATEGORY_ICONS)) {
+   104→    if (key.includes(k)) return v;
+   105→  }
+   106→  return '📦';
+   107→}
+   108→
+   109→// ─── Hook minimal : détection du pays via IP ───
+   110→function useDetectedCountry(): { countryCode: string; isLoading: boolean } {
+   111→  const [countryCode, setCountryCode] = useState('FR');
+   112→  const [isLoading, setIsLoading] = useState(true);
+   113→
+   114→  useEffect(() => {
+   115→    let cancelled = false;
+   116→    (async () => {
+   117→      try {
+   118→        const res = await fetch('/api/detect-country', { cache: 'no-store' });
+   119→        if (res.ok) {
+   120→          const data = await res.json();
+   121→          if (data?.countryCode && !cancelled) {
+   122→            setCountryCode(String(data.countryCode).toUpperCase());
+   123→          }
+   124→        }
+   125→      } catch {
+   126→        // Silent fallback to FR
+   127→      } finally {
+   128→        if (!cancelled) setIsLoading(false);
+   129→      }
+   130→    })();
+   131→    return () => { cancelled = true; };
+   132→  }, []);
+   133→
+   134→  return { countryCode, isLoading };
+   135→}
+   136→
+   137→function isLocalPhoneValid(localDigits: string): boolean {
+   138→  const n = localDigits.replace(/\D/g, '');
+   139→  return n.length >= 6 && n.length <= 15;
+   140→}
+   141→
+   142→function getMonthlyFoundCount(): number {
+   143→  const month = new Date().getMonth();
+   144→  return 127 + ((month * 13) % 40);
+   145→}
+   146→
+   147→interface PackPratiqueProps {
+   148→  reference: string;
+   149→  baggage: BaggageData;
+   150→}
+   151→
+   152→export default function PackPratique({ reference, baggage }: PackPratiqueProps) {
+   153→  const { countryCode, isLoading: countryLoading } = useDetectedCountry();
+   154→
+   155→  const [finderName, setFinderName] = useState('');
+   156→  const [finderPhone, setFinderPhone] = useState('');
+   157→  const [phoneCountry, setPhoneCountry] = useState('FR');
+   158→  const [otherLocation, setOtherLocation] = useState('');
+   159→  const [finderMessage, setFinderMessage] = useState('');
+   160→  const [showMoreOptions, setShowMoreOptions] = useState(false);
+   161→  const [isSubmitting, setIsSubmitting] = useState(false);
+   162→  const [hasContactedOwner, setHasContactedOwner] = useState(false);
+   163→  const [showSuccess, setShowSuccess] = useState(false);
+   164→
+   165→  // GPS state
+   166→  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
+   167→  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+   168→  const [gpsAddress, setGpsAddress] = useState<string>('');
+   169→  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+   170→
+   171→  // Sync la country détectée par IP vers le PhoneInput
+   172→  useEffect(() => {
+   173→    if (!countryLoading && countryCode) {
+   174→      setPhoneCountry(countryCode);
+   175→    }
+   176→  }, [countryCode, countryLoading]);
+   177→
+   178→  // ─── Check if already contacted ───
+   179→  useEffect(() => {
+   180→    if (typeof window !== 'undefined' &&
+   181→        localStorage.getItem(`contacted_owner_${reference}`) === 'true') {
+   182→      setHasContactedOwner(true);
+   183→    }
+   184→  }, [reference]);
+   185→
+   186→  // ─── Auto GPS detection on mount ───
+   187→  useEffect(() => {
+   188→    if (!('geolocation' in navigator)) {
+   189→      setGpsStatus('error');
+   190→      return;
+   191→    }
+   192→
+   193→    setGpsStatus('loading');
+   194→    navigator.geolocation.getCurrentPosition(
+   195→      (position) => {
+   196→        const { latitude, longitude, accuracy } = position.coords;
+   197→        setGpsCoords({ lat: latitude, lng: longitude });
+   198→        setGpsAccuracy(Math.round(accuracy));
+   199→        setGpsStatus('success');
+   200→
+   201→        fetch(
+   202→          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+   203→          { headers: { 'Accept-Language': 'fr' } }
+   204→        )
+   205→          .then((res) => res.json())
+   206→          .then((data) => {
+   207→            if (data?.display_name) {
+   208→              setGpsAddress(data.display_name);
+   209→            } else {
+   210→              setGpsAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+   211→            }
+   212→          })
+   213→          .catch(() => {
+   214→            setGpsAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+   215→          });
+   216→      },
+   217→      () => {
+   218→        setGpsStatus('error');
+   219→      },
+   220→      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+   221→    );
+   222→  }, []);
+   223→
+   224→  // ─── Submit → POST scan + open WhatsApp ───
+   225→  const handleSubmit = useCallback(async () => {
+   226→    if (!finderName.trim()) {
+   227→      alert('Veuillez entrer votre nom');
+   228→      return;
+   229→    }
+   230→    const normalized = normalizePhone(finderPhone, phoneCountry);
+   231→    if (normalized.length < 8) {
+   232→      alert('Veuillez entrer un numéro de téléphone valide');
+   233→      return;
+   234→    }
+   235→    setIsSubmitting(true);
+   236→    try {
+   237→      const res = await fetch(`/api/scan/${reference}`, {
+   238→        method: 'POST',
+   239→        headers: { 'Content-Type': 'application/json' },
+   240→        body: JSON.stringify({
+   241→          location: otherLocation.trim() || gpsAddress || '',
+   242→          finderName: finderName.trim(),
+   243→          finderPhone: `+${normalized}`,
+   244→          message: finderMessage.trim() || null,
+   245→          latitude: gpsCoords?.lat,
+   246→          longitude: gpsCoords?.lng,
+   247→        }),
+   248→      });
+   249→
+   250→      const data = await res.json();
+   251→      const whatsappUrl = data.whatsappUrl as string;
+   252→      if (whatsappUrl) {
+   253→        window.open(whatsappUrl, '_blank');
+   254→      }
+   255→      setShowSuccess(true);
+   256→      setHasContactedOwner(true);
+   257→      localStorage.setItem(`contacted_owner_${reference}`, 'true');
+   258→      setTimeout(() => setShowSuccess(false), 6000);
+   259→    } catch (err) {
+   260→      console.error(err);
+   261→      alert('Erreur lors de la notification');
+   262→    } finally {
+   263→      setIsSubmitting(false);
+   264→    }
+   265→  }, [finderName, finderPhone, phoneCountry, otherLocation, finderMessage, gpsCoords, gpsAddress, reference]);
+   266→
+   267→  const retryGps = () => {
+   268→    setGpsStatus('idle');
+   269→    setGpsCoords(null);
+   270→    setGpsAddress('');
+   271→    setGpsAccuracy(null);
+   272→    setTimeout(() => {
+   273→      if ('geolocation' in navigator) {
+   274→        setGpsStatus('loading');
+   275→        navigator.geolocation.getCurrentPosition(
+   276→          (position) => {
+   277→            const { latitude, longitude, accuracy } = position.coords;
+   278→            setGpsCoords({ lat: latitude, lng: longitude });
+   279→            setGpsAccuracy(Math.round(accuracy));
+   280→            setGpsStatus('success');
+   281→            fetch(
+   282→              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+   283→              { headers: { 'Accept-Language': 'fr' } }
+   284→            )
+   285→              .then((r) => r.json())
+   286→              .then((d) => setGpsAddress(d?.display_name || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`))
+   287→              .catch(() => setGpsAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`));
+   288→          },
+   289→          () => setGpsStatus('error'),
+   290→          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+   291→        );
+   292→      } else {
+   293→        setGpsStatus('error');
+   294→      }
+   295→    }, 100);
+   296→  };
+   297→
+   298→  const autofillLocation = useCallback(() => {
+   299→    if (gpsAddress) {
+   300→      setOtherLocation(gpsAddress.split(',').slice(0, 3).join(',').trim());
+   301→      setShowMoreOptions(true);
+   302→      return;
+   303→    }
+   304→    if (gpsCoords) {
+   305→      setOtherLocation(`${gpsCoords.lat.toFixed(5)}, ${gpsCoords.lng.toFixed(5)}`);
+   306→      setShowMoreOptions(true);
+   307→      return;
+   308→    }
+   309→    if ('geolocation' in navigator) {
+   310→      setGpsStatus('loading');
+   311→      navigator.geolocation.getCurrentPosition(
+   312→        (position) => {
+   313→          const { latitude, longitude, accuracy } = position.coords;
+   314→          setGpsCoords({ lat: latitude, lng: longitude });
+   315→          setGpsAccuracy(Math.round(accuracy));
+   316→          setGpsStatus('success');
+   317→          fetch(
+   318→            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+   319→            { headers: { 'Accept-Language': 'fr' } }
+   320→          )
+   321→            .then((r) => r.json())
+   322→            .then((d) => {
+   323→              const addr = d?.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+   324→              setGpsAddress(addr);
+   325→              setOtherLocation(addr.split(',').slice(0, 3).join(',').trim());
+   326→            })
+   327→            .catch(() => {
+   328→              const addr = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+   329→              setGpsAddress(addr);
+   330→              setOtherLocation(addr);
+   331→            });
+   332→          setShowMoreOptions(true);
+   333→        },
+   334→        () => {
+   335→          setGpsStatus('error');
+   336→          alert('Géolocalisation indisponible. Veuillez saisir le lieu manuellement.');
+   337→        },
+   338→        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+   339→      );
+   340→    } else {
+   341→      alert('Géolocalisation non supportée sur cet appareil.');
+   342→    }
+   343→  }, [gpsAddress, gpsCoords]);
+   344→
+   345→  // ═══════════════════════════════════════════════════════════════════
+   346→  // Derived values
+   347→  // ═══════════════════════════════════════════════════════════════════
+   348→  const objInfo = baggage?.objectInfo || null;
+   349→  const ownerFirstName = baggage?.travelerFirstName || '';
+   350→  const ownerFullName = baggage?.travelerName || 'Anonyme';
+   351→  const objectRef = baggage?.reference || reference;
+   352→  const isLost = baggage?.isLost || (baggage?.declaredLostAt && !baggage?.foundAt);
+   353→
+   354→  const ownerDisplayName = useMemo(() => {
+   355→    if (!ownerFullName || ownerFullName === 'Anonyme') return 'Propriétaire vérifié';
+   356→    const parts = ownerFullName.trim().split(/\s+/);
+   357→    if (parts.length === 1) return parts[0];
+   358→    const first = parts[0];
+   359→    const lastInitial = parts[parts.length - 1][0]?.toUpperCase() || '';
+   360→    return lastInitial ? `${first} ${lastInitial}.` : first;
+   361→  }, [ownerFullName]);
+   362→
+   363→  const phoneLocalDigits = useMemo(() => {
+   364→    const dialDigits = getDialCode(phoneCountry).replace('+', '');
+   365→    const digits = finderPhone.replace(/\D/g, '');
+   366→    if (digits.startsWith(dialDigits)) return digits.slice(dialDigits.length);
+   367→    return digits;
+   368→  }, [finderPhone, phoneCountry]);
+   369→  const isPhoneValid = phoneLocalDigits.length >= 6 && phoneLocalDigits.length <= 15;
+   370→
+   371→  const accuracyLabel = useMemo(() => {
+   372→    if (gpsAccuracy == null) return null;
+   373→    if (gpsAccuracy <= 20) return 'Position très précise';
+   374→    if (gpsAccuracy <= 80) return 'Position précise';
+   375→    if (gpsAccuracy <= 200) return 'Position approximative';
+   376→    return 'Position imprécise';
+   377→  }, [gpsAccuracy]);
+   378→
+   379→  const monthlyCount = getMonthlyFoundCount();
+   380→  const categoryIcon = getCategoryIcon(objInfo?.category);
+   381→  const hasReward = Boolean(objInfo?.reward && String(objInfo.reward).trim());
+   382→
+   383→  return (
+   384→    <main className="min-h-screen py-8 px-4 pb-32 md:pb-8" style={{ backgroundColor: QRTAGS_BG, color: QRTAGS_INK }}>
+   385→      <div className="max-w-2xl mx-auto">
+   386→        {/* Header */}
+   387→        <div className="text-center mb-8">
+   388→          <div className="bg-white inline-block px-6 py-3 rounded-lg mb-4 shadow-lg border-2 border-black">
+   389→            <QRTagsLogo size="md" variant="light" />
+   390→          </div>
+   391→          <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full mb-4 border-2 border-black">
+   392→            <div
+   393→              className="w-3 h-3 rounded-full animate-pulse"
+   394→              style={{ backgroundColor: isLost ? QRTAGS_RED : QRTAGS_GREEN }}
+   395→            />
+   396→            <span className="text-black font-bold text-sm">
+   397→              {isLost ? 'Objet signalé perdu' : 'Objet retrouvé'}
+   398→            </span>
+   399→          </div>
+   400→          <h1 className="text-3xl md:text-4xl font-black text-black mb-2">
+   401→            🎯 {isLost ? 'OBJET PERDU' : 'OBJET RETROUVÉ'}
+   402→          </h1>
+   403→          <p className="text-black/80">
+   404→            Référence : <span className="font-bold text-black">{objectRef}</span>
+   405→          </p>
+   406→        </div>
+   407→
+   408→        {/* ═════ BANDEAU RÉCOMPENSE ═════ */}
+   409→        {hasReward && (
+   410→          <div
+   411→            className="reward-pulse reward-shimmer relative overflow-hidden mb-5 rounded-2xl text-center"
+   412→            style={{
+   413→              background: 'linear-gradient(135deg, #F59E0B 0%, #F97316 50%, #DC2626 100%)',
+   414→              border: '3px solid #111',
+   415→              boxShadow: '0 10px 28px rgba(217, 119, 6, 0.45)',
+   416→            }}
+   417→          >
+   418→            <div className="relative z-10 px-5 py-4 md:py-5">
+   419→              <div className="flex items-center justify-center gap-2 mb-1">
+   420→                <Gift className="w-5 h-5 md:w-6 md:h-6 text-white drop-shadow" />
+   421→                <span className="text-white text-xs md:text-sm font-black uppercase tracking-wider drop-shadow">
+   422→                  Récompense offerte
+   423→                </span>
+   424→              </div>
+   425→              <p className="text-white font-black leading-none drop-shadow-lg"
+   426→                 style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', textShadow: '2px 2px 0 rgba(0,0,0,0.35)' }}>
+   427→                {objInfo!.reward}
+   428→              </p>
+   429→              <p className="text-white/95 text-xs md:text-sm font-bold mt-1.5 drop-shadow">
+   430→                💰 À vous qui aiderez à retrouver cet objet
+   431→              </p>
+   432→            </div>
+   433→          </div>
+   434→        )}
+   435→
+   436→        {/* ═════ Carte : infos de l'objet ═════ */}
+   437→        <div className={`${CARD_CLASS} mb-6`}>
+   438→          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+   439→            <h2 className="text-xl font-bold text-black flex items-center gap-2">
+   440→              <Package className="w-5 h-5" /> OBJET
+   441→            </h2>
+   442→          </div>
+   443→
+   444→          {/* Icône catégorie + nom objet */}
+   445→          <div className="bg-gradient-to-br from-yellow-50 to-amber-100 rounded-lg p-4 border-2 border-black mb-4">
+   446→            <div className="flex items-center gap-4">
+   447→              <div
+   448→                className="flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center text-4xl shadow-md"
+   449→                style={{ backgroundColor: 'white', border: '2px solid #111' }}
+   450→              >
+   451→                {categoryIcon}
+   452→              </div>
+   453→              <div className="flex-1 min-w-0">
+   454→                <p className="text-xs text-black/60 uppercase font-bold">Objet</p>
+   455→                <p className="text-black font-black text-xl truncate">
+   456→                  {objInfo?.object_name || 'Objet non spécifié'}
+   457→                </p>
+   458→                <p className="text-sm text-black/70 font-medium">
+   459→                  {objInfo?.category_label || objInfo?.category || 'Catégorie non précisée'}
+   460→                </p>
+   461→              </div>
+   462→            </div>
+   463→          </div>
+   464→
+   465→          {/* Photo de l'objet */}
+   466→          {objInfo?.photo && /^data:image\//i.test(objInfo.photo) && (
+   467→            <div className="mb-4">
+   468→              <p className="text-xs text-black/60 uppercase font-bold mb-2 flex items-center gap-1">
+   469→                <Package className="w-3 h-3" /> Photo de l'objet
+   470→              </p>
+   471→              <div
+   472→                className="relative w-full rounded-lg overflow-hidden border-2 border-black bg-gray-100"
+   473→                style={{ maxHeight: '360px' }}
+   474→              >
+   475→                <img
+   476→                  src={objInfo.photo}
+   477→                  alt={`Photo de l'objet : ${objInfo?.object_name || 'objet non nommé'}`}
+   478→                  className="w-full h-auto object-contain"
+   479→                  style={{ maxHeight: '360px' }}
+   480→                  loading="lazy"
+   481→                />
+   482→              </div>
+   483→              <p className="text-xs text-black/50 mt-1 italic">
+   484→                📸 Photo partagée par le propriétaire pour vous aider à confirmer qu'il s'agit bien de cet objet.
+   485→              </p>
+   486→            </div>
+   487→          )}
+   488→
+   489→          <div className="bg-gray-50 rounded-lg p-4 border-2 border-black">
+   490→            <div className="grid grid-cols-2 gap-4">
+   491→              {objInfo?.color && (
+   492→                <div>
+   493→                  <p className="text-xs text-black/60 uppercase font-bold">Couleur</p>
+   494→                  <p className="text-black font-bold">{objInfo.color}</p>
+   495→                </div>
+   496→              )}
+   497→              {objInfo?.brand && (
+   498→                <div>
+   499→                  <p className="text-xs text-black/60 uppercase font-bold">Marque</p>
+   500→                  <p className="text-black font-bold">{objInfo.brand}</p>
+   501→                </div>
+   502→              )}
+   503→              {objInfo?.model && (
+   504→                <div>
+   505→                  <p className="text-xs text-black/60 uppercase font-bold">Modèle</p>
+   506→                  <p className="text-black font-bold">{objInfo.model}</p>
+   507→                </div>
+   508→              )}
+   509→              <div>
+   510→                <p className="text-xs text-black/60 uppercase font-bold">Propriétaire</p>
+   511→                <p className="text-black font-bold flex items-center gap-1.5">
+   512→                  <ShieldCheck className="w-4 h-4" style={{ color: QRTAGS_GREEN }} />
+   513→                  {ownerDisplayName}
+   514→                </p>
+   515→              </div>
+   516→            </div>
+   517→
+   518→            {objInfo?.object_description && (
+   519→              <div className="mt-4 pt-4 border-t-2 border-gray-200">
+   520→                <p className="text-xs text-black/60 uppercase font-bold mb-1">Description</p>
+   521→                <p className="text-black text-sm">{objInfo.object_description}</p>
+   522→              </div>
+   523→            )}
+   524→
+   525→            {objInfo?.message_to_finder && (
+   526→              <div
+   527→                className="mt-4 relative overflow-hidden rounded-xl"
+   528→                style={{
+   529→                  background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 60%, #FDE68A 100%)',
+   530→                  border: '3px solid #B45309',
+   531→                  boxShadow: '0 6px 16px rgba(180, 83, 9, 0.18)',
+   532→                }}
+   533→              >
+   534→                <div
+   535→                  className="absolute top-0 left-0 h-full w-1.5"
+   536→                  style={{ background: 'linear-gradient(180deg, #F59E0B, #DC2626)' }}
+   537→                />
+   538→                <div className="relative px-5 py-4 pl-7">
+   539→                  <div className="flex items-center gap-2 mb-2">
+   540→                    <div
+   541→                      className="flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0"
+   542→                      style={{ backgroundColor: '#DC2626', border: '2px solid #7F1D1D' }}
+   543→                    >
+   544→                      <MessageCircle className="w-4 h-4 text-white" />
+   545→                    </div>
+   546→                    <p
+   547→                      className="text-xs uppercase font-black tracking-wider"
+   548→                      style={{ color: '#7C2D12' }}
+   549→                    >
+   550→                      Message du propriétaire
+   551→                    </p>
+   552→                  </div>
+   553→                  <p
+   554→                    className="font-bold leading-relaxed"
+   555→                    style={{
+   556→                      color: '#1C1917',
+   557→                      fontSize: '1.05rem',
+   558→                      fontStyle: 'italic',
+   559→                      lineHeight: 1.5,
+   560→                    }}
+   561→                  >
+   562→                    &ldquo;{objInfo.message_to_finder}&rdquo;
+   563→                  </p>
+   564→                  <p className="mt-2 text-xs font-bold flex items-center gap-1" style={{ color: '#92400E' }}>
+   565→                    ✉️ Merci de lire ce message avant toute chose.
+   566→                  </p>
+   567→                </div>
+   568→              </div>
+   569→            )}
+   570→          </div>
+   571→        </div>
+   572→
+   573→        {/* ═════ Carte : Géolocalisation automatique ═════ */}
+   574→        <div className={`${CARD_CLASS} mb-6`}>
+   575→          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+   576→            <h3 className="text-lg font-bold text-black flex items-center gap-2">
+   577→              <Navigation className="w-5 h-5" /> VOTRE POSITION GPS
+   578→            </h3>
+   579→            {accuracyLabel && gpsStatus === 'success' && (
+   580→              <span
+   581→                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+   582→                style={{
+   583→                  backgroundColor: gpsAccuracy! <= 80 ? '#dcfce7' : '#fef3c7',
+   584→                  color: gpsAccuracy! <= 80 ? '#14532d' : '#78350f',
+   585→                  border: '1px solid currentColor',
+   586→                }}
+   587→              >
+   588→                <Zap className="w-3 h-3" />
+   589→                {accuracyLabel} · ~{gpsAccuracy}m
+   590→              </span>
+   591→            )}
+   592→          </div>
+   593→
+   594→          {gpsStatus === 'idle' && (
+   595→            <div className="bg-gray-50 rounded-lg p-6 border-2 border-dashed border-gray-300 text-center">
+   596→              <MapPin className="w-8 h-8 mx-auto mb-2 text-black/40" />
+   597→              <p className="text-black/70 text-sm">En attente de détection...</p>
+   598→            </div>
+   599→          )}
+   600→
+   601→          {gpsStatus === 'loading' && (
+   602→            <div className="bg-gray-50 rounded-lg p-6 border-2 border-dashed border-gray-300 text-center">
+   603→              <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin" style={{ color: QRTAGS_INK }} />
+   604→              <p className="text-black font-bold">Détection de votre position...</p>
+   605→              <p className="text-sm text-black/60 mt-2">Veuillez autoriser l'accès à la géolocalisation</p>
+   606→            </div>
+   607→          )}
+   608→
+   609→          {gpsStatus === 'success' && gpsCoords && (
+   610→            <div className="bg-green-50 rounded-lg p-4 border-2" style={{ borderColor: QRTAGS_GREEN }}>
+   611→              <div className="flex items-start gap-3">
+   612→                <CheckCircle2 className="w-6 h-6 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_GREEN }} />
+   613→                <div className="flex-1 min-w-0">
+   614→                  <p className="font-bold mb-1" style={{ color: QRTAGS_GREEN }}>Position détectée avec succès !</p>
+   615→                  <p className="text-black text-sm mb-2 break-words">
+   616→                    {gpsAddress || `${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}`}
+   617→                  </p>
+   618→                  <div className="bg-white rounded-md p-1 border mb-2" style={{ borderColor: QRTAGS_GREEN }}>
+   619→                    <iframe
+   620→                      title="Carte de votre position"
+   621→                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsCoords.lng - 0.005}%2C${gpsCoords.lat - 0.005}%2C${gpsCoords.lng + 0.005}%2C${gpsCoords.lat + 0.005}&layer=mapnik&marker=${gpsCoords.lat}%2C${gpsCoords.lng}`}
+   622→                      className="w-full rounded"
+   623→                      style={{ height: '160px', border: 0 }}
+   624→                      loading="lazy"
+   625→                    />
+   626→                  </div>
+   627→                  <div className="flex flex-wrap gap-2 mt-2">
+   628→                    <a
+   629→                      href={`https://www.google.com/maps?q=${gpsCoords.lat},${gpsCoords.lng}`}
+   630→                      target="_blank"
+   631→                      rel="noopener noreferrer"
+   632→                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-bold text-white transition hover:opacity-90 min-h-[40px]"
+   633→                      style={{ backgroundColor: QRTAGS_GREEN }}
+   634→                    >
+   635→                      <ExternalLink className="w-3.5 h-3.5" />
+   636→                      Google Maps
+   637→                    </a>
+   638→                    <a
+   639→                      href={`https://waze.com/ul?ll=${gpsCoords.lat}%2C${gpsCoords.lng}&navigate=yes`}
+   640→                      target="_blank"
+   641→                      rel="noopener noreferrer"
+   642→                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-bold text-white transition hover:opacity-90 min-h-[40px]"
+   643→                      style={{ backgroundColor: '#33A1FF' }}
+   644→                    >
+   645→                      <Navigation className="w-3.5 h-3.5" />
+   646→                      Ouvrir dans Waze
+   647→                    </a>
+   648→                  </div>
+   649→                </div>
+   650→              </div>
+   651→            </div>
+   652→          )}
+   653→
+   654→          {gpsStatus === 'error' && (
+   655→            <div className="bg-red-50 rounded-lg p-4 border-2" style={{ borderColor: QRTAGS_RED }}>
+   656→              <div className="flex items-start gap-3">
+   657→                <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_RED }} />
+   658→                <div className="flex-1">
+   659→                  <p className="font-bold mb-2" style={{ color: QRTAGS_RED }}>Géolocalisation non disponible</p>
+   660→                  <p className="text-black text-sm mb-3">
+   661→                    La géolocalisation aide le propriétaire à retrouver son objet plus rapidement.
+   662→                    Vous pouvez quand même remplir le formulaire ci-dessous.
+   663→                  </p>
+   664→                  <button
+   665→                    type="button"
+   666→                    onClick={retryGps}
+   667→                    className="px-4 py-2 rounded-lg font-bold text-sm text-white transition min-h-[40px]"
+   668→                    style={{ backgroundColor: QRTAGS_RED }}
+   669→                  >
+   670→                    <RefreshCw className="w-3 h-3 inline mr-1" /> Réessayer
+   671→                  </button>
+   672→                </div>
+   673→              </div>
+   674→            </div>
+   675→          )}
+   676→        </div>
+   677→
+   678→        {/* ═════ Carte : Formulaire du trouveur ═════ */}
+   679→        <div className={`${CARD_CLASS} mb-6`}>
+   680→          <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2">
+   681→            <User className="w-5 h-5" /> VOS INFORMATIONS
+   682→          </h3>
+   683→
+   684→          <div className="space-y-4">
+   685→            <div>
+   686→              <label htmlFor="finder-name" className="block text-sm font-bold text-black mb-2">
+   687→                <User className="w-3 h-3 inline mr-1" /> Votre nom <span style={{ color: QRTAGS_RED }}>*</span>
+   688→              </label>
+   689→              <input
+   690→                id="finder-name"
+   691→                type="text"
+   692→                value={finderName}
+   693→                onChange={(e) => setFinderName(e.target.value)}
+   694→                placeholder="Entrez votre nom complet"
+   695→                className={INPUT_CLASS}
+   696→                inputMode="text"
+   697→                autoComplete="name"
+   698→                required
+   699→              />
+   700→            </div>
+   701→
+   702→            <div>
+   703→              <label htmlFor="finder-phone" className="block text-sm font-bold text-black mb-2">
+   704→                <Phone className="w-3 h-3 inline mr-1" /> Votre téléphone <span style={{ color: QRTAGS_RED }}>*</span>
+   705→                {finderPhone && isPhoneValid && (
+   706→                  <span className="ml-2 inline-flex items-center gap-1 text-xs" style={{ color: QRTAGS_GREEN }}>
+   707→                    <CheckCircle2 className="w-3.5 h-3.5" /> Numéro valide
+   708→                  </span>
+   709→                )}
+   710→              </label>
+   711→              <PhoneInput
+   712→                countryCode={phoneCountry}
+   713→                onCountryChange={setPhoneCountry}
+   714→                value={finderPhone}
+   715→                onChange={setFinderPhone}
+   716→                placeholder="6 12 34 56 78"
+   717→                required
+   718→                hint="Pays détecté automatiquement via votre IP. Modifiable si besoin."
+   719→              />
+   720→              <button
+   721→                type="button"
+   722→                onClick={autofillLocation}
+   723→                className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-black/70 hover:text-black underline min-h-[36px]"
+   724→              >
+   725→                <Zap className="w-3 h-3" /> Remplir automatiquement le lieu précis avec ma position
+   726→              </button>
+   727→            </div>
+   728→
+   729→            <div className="border-t-2 border-gray-200 pt-3">
+   730→              <button
+   731→                type="button"
+   732→                onClick={() => setShowMoreOptions(!showMoreOptions)}
+   733→                className="w-full flex items-center justify-between text-sm font-bold text-black/70 hover:text-black transition min-h-[40px]"
+   734→                aria-expanded={showMoreOptions}
+   735→              >
+   736→                <span className="flex items-center gap-1.5">
+   737→                  <ChevronDown className={`w-4 h-4 transition-transform ${showMoreOptions ? 'rotate-180' : ''}`} />
+   738→                  {showMoreOptions ? 'Moins d\'options' : '+ Plus d\'options'}
+   739→                </span>
+   740→                <span className="text-xs text-black/50">Optionnel</span>
+   741→              </button>
+   742→
+   743→              {showMoreOptions && (
+   744→                <div className="space-y-4 mt-3">
+   745→                  <div>
+   746→                    <label htmlFor="finder-location" className="block text-sm font-bold text-black mb-2">
+   747→                      <MapPin className="w-3 h-3 inline mr-1" /> Lieu précis (optionnel)
+   748→                    </label>
+   749→                    <input
+   750→                      id="finder-location"
+   751→                      type="text"
+   752→                      value={otherLocation}
+   753→                      onChange={(e) => setOtherLocation(e.target.value)}
+   754→                      placeholder="Ex: Hall d'accueil, réception, devant la gare..."
+   755→                      className={INPUT_CLASS}
+   756→                      autoComplete="street-address"
+   757→                    />
+   758→                  </div>
+   759→
+   760→                  <div>
+   761→                    <label htmlFor="finder-message" className="block text-sm font-bold text-black mb-2">
+   762→                      <MessageCircle className="w-3 h-3 inline mr-1" /> Message au propriétaire (optionnel)
+   763→                    </label>
+   764→                    <textarea
+   765→                      id="finder-message"
+   766→                      rows={3}
+   767→                      value={finderMessage}
+   768→                      onChange={(e) => setFinderMessage(e.target.value)}
+   769→                      placeholder="Ex: J'ai trouvé votre objet ce matin devant l'entrée..."
+   770→                      className={`${INPUT_CLASS} resize-none`}
+   771→                    />
+   772→                  </div>
+   773→                </div>
+   774→              )}
+   775→            </div>
+   776→          </div>
+   777→
+   778→          <p className="text-center text-sm font-bold text-black mt-5 mb-2">
+   779→            👉 Cliquez pour contacter {ownerFirstName || 'le propriétaire'} gratuitement
+   780→          </p>
+   781→
+   782→          <button
+   783→            type="button"
+   784→            onClick={handleSubmit}
+   785→            disabled={isSubmitting || !finderName.trim() || !isPhoneValid}
+   786→            className="wa-pulse w-full mt-2 px-6 py-5 rounded-xl font-black text-lg text-white transition flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 min-h-[56px]"
+   787→            style={{ backgroundColor: QRTAGS_GREEN, border: '3px solid #14532d' }}
+   788→          >
+   789→            {isSubmitting ? (
+   790→              <>
+   791→                <Loader2 className="w-6 h-6 animate-spin" />
+   792→                Envoi en cours...
+   793→              </>
+   794→            ) : (
+   795→              <>
+   796→                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+   797→                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+   798→                </svg>
+   799→                Contacter le propriétaire via WhatsApp
+   800→              </>
+   801→            )}
+   802→          </button>
+   803→
+   804→          {baggage?.whatsappOwner && (() => {
+   805→            const digits = baggage.whatsappOwner.replace(/[^0-9]/g, '');
+   806→            if (!digits) return null;
+   807→            return (
+   808→              <a
+   809→                href={`tel:+${digits}`}
+   810→                className="w-full mt-3 px-6 py-4 rounded-xl font-bold text-base text-black transition flex items-center justify-center gap-2 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 min-h-[52px]"
+   811→                style={{ backgroundColor: 'white', border: '2px solid #111' }}
+   812→              >
+   813→                <Phone className="w-5 h-5" style={{ color: QRTAGS_INK }} />
+   814→                Contacter par téléphone
+   815→              </a>
+   816→            );
+   817→          })()}
+   818→
+   819→          <p className="text-center text-xs text-black/70 mt-3 flex items-center justify-center gap-1.5">
+   820→            <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: QRTAGS_GREEN }} />
+   821→            Déjà {monthlyCount} objets retrouvés ce mois-ci grâce à QRTags
+   822→          </p>
+   823→
+   824→          <p className="text-xs text-black/60 text-center mt-3">
+   825→            Le propriétaire sera contacté via WhatsApp (clic-vers-chat).
+   826→            Aucune autre notification n'est envoyée.
+   827→          </p>
+   828→        </div>
+   829→
+   830→        {/* Confirmation si déjà contacté */}
+   831→        {hasContactedOwner && !showSuccess && (
+   832→          <div className={`${CARD_CLASS} mb-6`}>
+   833→            <div className="flex items-start gap-3">
+   834→              <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_GREEN }} />
+   835→              <div className="text-sm">
+   836→                <div className="font-bold mb-1 text-black">Propriétaire déjà contacté</div>
+   837→                <div className="text-black/70">
+   838→                  Vous avez déjà envoyé un message au propriétaire de cet objet. Vous pouvez
+   839→                  renvoyer un message si nécessaire.
+   840→                </div>
+   841→              </div>
+   842→            </div>
+   843→          </div>
+   844→        )}
+   845→
+   846→        {/* Footer */}
+   847→        <div className="text-center mb-8 hidden md:block">
+   848→          <a href="/" className="inline-flex items-center gap-2 text-black/70 hover:text-black text-sm">
+   849→            <ArrowLeft className="w-4 h-4" /> Retour à l'accueil
+   850→          </a>
+   851→          <p className="text-black/70 text-sm mt-2">
+   852→            Propulsé par <span className="font-bold text-black">QRTags</span>
+   853→          </p>
+   854→          <p className="text-black/50 text-xs mt-1">Ensemble, retrouvons les objets perdus</p>
+   855→        </div>
+   856→      </div>
+   857→
+   858→      {/* ═════ Sticky WhatsApp + Tel buttons (mobile only) ═════ */}
+   859→      <div
+   860→        className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-3 shadow-2xl"
+   861→        style={{ backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(8px)', borderTop: '2px solid #111' }}
+   862→      >
+   863→        <div className="flex gap-2">
+   864→          <button
+   865→            type="button"
+   866→            onClick={handleSubmit}
+   867→            disabled={isSubmitting || !finderName.trim() || !isPhoneValid}
+   868→            className="wa-pulse flex-1 px-3 py-4 rounded-xl font-black text-sm text-white transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px]"
+   869→            style={{ backgroundColor: QRTAGS_GREEN, border: '2px solid #14532d' }}
+   870→          >
+   871→            {isSubmitting ? (
+   872→              <>
+   873→                <Loader2 className="w-5 h-5 animate-spin" />
+   874→                Envoi...
+   875→              </>
+   876→            ) : (
+   877→              <>
+   878→                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+   879→                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+   880→                </svg>
+   881→                WhatsApp
+   882→              </>
+   883→            )}
+   884→          </button>
+   885→          {baggage?.whatsappOwner && (() => {
+   886→            const digits = baggage.whatsappOwner.replace(/[^0-9]/g, '');
+   887→            if (!digits) return null;
+   888→            return (
+   889→              <a
+   890→                href={`tel:+${digits}`}
+   891→                className="flex-shrink-0 px-4 py-4 rounded-xl font-black text-sm text-black transition flex items-center justify-center gap-1.5 min-h-[52px]"
+   892→                style={{ backgroundColor: 'white', border: '2px solid #111' }}
+   893→                aria-label="Contacter par téléphone"
+   894→              >
+   895→                <Phone className="w-5 h-5" style={{ color: QRTAGS_INK }} />
+   896→                Appeler
+   897→              </a>
+   898→            );
+   899→          })()}
+   900→        </div>
+   901→      </div>
+   902→
+   903→      {/* Modal de succès */}
+   904→      {showSuccess && (
+   905→        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+   906→          <div className="bg-white rounded-xl p-8 max-w-md w-full text-center border-2 border-black shadow-2xl">
+   907→            <div
+   908→              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"
+   909→              style={{ backgroundColor: QRTAGS_GREEN }}
+   910→            >
+   911→              <CheckCircle2 className="w-12 h-12 text-white" />
+   912→            </div>
+   913→            <h2 className="text-2xl font-black text-black mb-3">MESSAGE ENVOYÉ !</h2>
+   914→            <p className="text-black/80 mb-6">
+   915→              WhatsApp s'est ouvert dans un nouvel onglet avec le message pré-rempli.
+   916→              Le propriétaire a aussi reçu votre position GPS.
+   917→            </p>
+   918→            <div className="bg-gray-50 rounded-lg p-4 border-2 border-black mb-6 text-left">
+   919→              <p className="text-sm font-bold text-black mb-2">Prochaines étapes :</p>
+   920→              <ul className="text-sm text-black space-y-2">
+   921→                <li className="flex items-start gap-2">
+   922→                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_GREEN }} />
+   923→                  <span>WhatsApp s'est ouvert avec le message pré-rempli</span>
+   924→                </li>
+   925→                <li className="flex items-start gap-2">
+   926→                  <MessageCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_INK }} />
+   927→                  <span>Cliquez sur &quot;Envoyer&quot; dans WhatsApp</span>
+   928→                </li>
+   929→                <li className="flex items-start gap-2">
+   930→                  <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: QRTAGS_INK }} />
+   931→                  <span>Convenez d'un rendez-vous pour la restitution</span>
+   932→                </li>
+   933→              </ul>
+   934→            </div>
+   935→            <button
+   936→              type="button"
+   937→              onClick={() => setShowSuccess(false)}
+   938→              className="w-full px-6 py-3 rounded-lg font-bold bg-black text-[#E3B23C] hover:bg-gray-900 transition min-h-[48px]"
+   939→            >
+   940→              Fermer
+   941→            </button>
+   942→          </div>
+   943→        </div>
+   944→      )}
+   945→    </main>
+   946→  );
+   947→}
+   948→

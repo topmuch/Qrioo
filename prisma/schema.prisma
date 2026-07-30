@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Agency {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String?   @unique
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  logo        String?
+  description String?
+  status      String    @default("active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  baggages    Baggage[]
+  batches     Batch[]
+
+  @@map("agencies")
+}
+
+model Baggage {
+  id                String    @id @default(cuid())
+  reference         String    @unique
+  type              String    @default("voyageur")
+  setId             String?
+  agencyId          String?
+  travelerFirstName  String?
+  travelerLastName  String?
+  whatsappOwner     String?
+  baggageIndex      Int?      @default(1)
+  baggageType       String?   @default("cabine")
+  status            String    @default("in_stock")
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime?
+  lastScanDate      DateTime?
+  lastLocation      String?
+  declaredLostAt    DateTime?
+  foundAt           DateTime?
+  founderName       String?
+  founderPhone      String?
+  founderAt         DateTime?
+  trackingToken     String?   @unique
+  trackingEnabled   Boolean   @default(true)
+  scanCount         Int       @default(0)
+  lastScanLocation  String?
+  isLost            Boolean   @default(false)
+  lostReportedAt    DateTime?
+  lostMessage       String?
+  customData        String?
+  packType          String    @default("pratique") @map("pack_type")
+  contentType       String?   @map("content_type")
+  contentUrl        String?   @map("content_url")
+  contentMetadata   String?   @map("content_metadata")
+  batchId           String?   @map("batch_id")
+  agency            Agency?       @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  batch             Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  scanLogs          ScanLog[]
+  guestMessages     GuestMessage[]
+
+  @@index([agencyId])
+}
+
+model ScanLog {
+  id         String   @id @default(cuid())
+  baggageId  String
+  ipAddress  String?
+  country    String?
+  city       String?
+  latitude   Float?
+  longitude  Float?
+  location   String?
+  message    String?
+  createdAt  DateTime @default(now())
+  context    String?
+  finderName String?
+  finderPhone String?
+  baggage    Baggage  @relation(fields: [baggageId], references: [id], onDelete: Cascade)
+
+  @@index([baggageId])
+}
+
+model Batch {
+  id         String   @id @default(cuid())
+  name       String
+  packType   String   @default("pratique") @map("pack_type")
+  quantity   Int
+  agencyId   String?  @map("agency_id")
+  status     String   @default("draft")
+  pdfUrl     String?  @map("pdf_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  baggages   Baggage[]
+  agency     Agency?  @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  @@map("batches")
+}
+
+model GuestMessage {
+  id          String   @id @default(cuid())
+  baggageId   String   @map("baggage_id")
+  authorName  String   @map("author_name")
+  content     String
+  contentUrl  String?  @map("content_url")
+  contentType String?  @map("content_type")
+  isModerated Boolean  @default(false) @map("is_moderated")
+  createdAt   DateTime @default(now()) @map("created_at")
+  baggage    Baggage  @relation(fields: [baggageId], references: [id], onDelete: Cascade)
+
+  @@index([baggageId])
+  @@map("guest_messages")
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  type        String
+  status      String   @default("non_lu")
+  senderName  String?
+  senderEmail String?
+  senderPhone String?
+  subject     String?
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
