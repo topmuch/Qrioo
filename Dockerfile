@@ -1,23 +1,19 @@
 FROM node:20-alpine AS base
 
-# Install sqlite3 and bun
+# Install sqlite3, git and bun
 RUN apk add --no-cache sqlite-libs git
 RUN npm install -g bun
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lockb* ./
+# Clone the repository
+RUN git clone https://github.com/topmuch/Qrioo.git .
 
 # Install dependencies
 RUN bun install --frozen-lockfile || bun install
 
 # Generate Prisma client
-COPY prisma ./prisma/
 RUN bunx prisma generate
-
-# Copy source
-COPY . .
 
 # Build Next.js
 RUN bun run build
