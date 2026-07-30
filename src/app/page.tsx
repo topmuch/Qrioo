@@ -8,7 +8,7 @@ import {
   CheckCircle2, Maximize, Bed, Home, PartyPopper, MapPin, ExternalLink,
   Eye, ChevronLeft, ChevronRight, Database, Code, Layers, Zap, Shield,
   RotateCcw, Settings2, AlertCircle, FileText, Download, Plus,
-  PieChart, BarChart3, TrendingUp, Activity,
+  PieChart, BarChart3, TrendingUp, Activity, RefreshCw, Clock, X, ChevronDown,
 } from 'lucide-react';
 import ActivatePratique, { type PratiqueFormData } from '@/components/activate/ActivatePratique';
 import ActivateEmotion, { type EmotionFormData } from '@/components/activate/ActivateEmotion';
@@ -139,6 +139,18 @@ const MOCK_PRATIQUE = {
 };
 
 // ─── Waveform bars generator ────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────
+function getTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `il y a ${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `il y a ${days}j`;
+}
+
 const WAVEFORM_BARS = Array.from({ length: 40 }, (_, i) => {
   const seed = (i * 7 + 13) % 17;
   return 0.25 + (seed / 17) * 0.75;
@@ -496,14 +508,47 @@ export default function QriooPage() {
   // ─── Étape 5 : Dashboard state ───────────────────────────
   const [dashLoading, setDashLoading] = useState(true);
   const [dash, setDash] = useState<Record<string, unknown> | null>(null);
+  const [dashRefreshing, setDashRefreshing] = useState(false);
+  const [dashPackFilter, setDashPackFilter] = useState<string>('all');
+  const [dashExpandedBatch, setDashExpandedBatch] = useState<string | null>(null);
+  const [dashBatchTags, setDashBatchTags] = useState<Array<{reference:string;status:string}>>([]);
+  const [dashBatchLoading, setDashBatchLoading] = useState(false);
+
+  const fetchDashboard = useCallback(async (packFilter?: string) => {
+    const q = packFilter && packFilter !== 'all' ? `?pack=${packFilter}` : '';
+    const res = await fetch(`/api/dashboard${q}`);
+    const d = await res.json();
+    if (!d.error) setDash(d);
+    return d;
+  }, []);
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then(r => r.json())
-      .then(d => { if (!d.error) setDash(d); })
-      .catch(() => {})
-      .finally(() => setDashLoading(false));
-  }, []);
+    fetchDashboard(dashPackFilter).finally(() => setDashLoading(false));
+  }, [fetchDashboard, dashPackFilter]);
+
+  const handleDashRefresh = useCallback(async () => {
+    setDashRefreshing(true);
+    await fetchDashboard(dashPackFilter);
+    setDashRefreshing(false);
+  }, [fetchDashboard, dashPackFilter]);
+
+  const handleExpandBatch = useCallback(async (batchId: string) => {
+    if (dashExpandedBatch === batchId) {
+      setDashExpandedBatch(null);
+      setDashBatchTags([]);
+      return;
+    }
+    setDashExpandedBatch(batchId);
+    setDashBatchLoading(true);
+    try {
+      const tagsRes = await fetch(`/api/batches/${batchId}/tags`);
+      if (tagsRes.ok) {
+        const tagsData = await tagsRes.json();
+        setDashBatchTags(tagsData.tags || []);
+      }
+    } catch {}
+    setDashBatchLoading(false);
+  }, [dashExpandedBatch]);
 
   // Generic activate handler
   const handleActivate = useCallback(async (packType: PackType, data: Record<string, unknown>) => {
@@ -1166,15 +1211,50 @@ switch (packType) {
       <section className="py-16 px-4 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold tracking-wider uppercase mb-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-100 text-violet-700 text-xs font-bold tracking-wider uppercase mb-4">
               <BarChart3 className="w-3.5 h-3.5" />
               Étape 5
             </div>
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-3">Dashboard Qrioo</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Vue d'ensemble en temps réel : KPIs multi-packs, répartition par type, activité quotidienne, lots et scans récents.
+              Vue d'ensemble en temps réel : KPIs multi-packs, répartition par type, activité quotidienne.
             </p>
+          </motion.div>
+
+          {/* Controls row: filter + refresh */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+            {/* Pack filter pills */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'Tous les packs' },
+                ...PACKS.map((p) => ({ value: p.id, label: p.title })),
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  onClick={() => { setDashPackFilter(f.value); setDashLoading(true); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[36px] ${
+                    dashPackFilter === f.value
+                      ? 'bg-gray-900 text-white shadow-md'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {f.value !== 'all' && <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: PACKS.find((p) => p.id === f.value)?.color || '#999' }} />}
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={handleDashRefresh}
+              disabled={dashRefreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+            >
+              <RefreshCw className={`w-4 h-4 ${dashRefreshing ? 'animate-spin' : ''}`} />
+              Actualiser
+            </button>
           </motion.div>
 
           {dashLoading ? (
@@ -1185,69 +1265,72 @@ switch (packType) {
             </div>
           ) : dash ? (
             <>
-              {/* KPI Cards */}
+              {/* ─── KPI Cards ─── */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {[
-                  { label: 'Total QR Codes', value: (dash.totalTags as number) || 0, sub: `${(dash.totalActivated as number) || 0} activés`, icon: <QrCode className="w-5 h-5 text-white" />, gradient: 'from-violet-600 to-purple-600' },
-                  { label: 'Taux d\'activation', value: `${(dash.activationRate as number) || 0}%`, sub: `${(dash.totalTags as number) || 0} tags`, icon: <TrendingUp className="w-5 h-5 text-white" />, gradient: 'from-emerald-500 to-teal-600' },
-                  { label: 'Total Scans', value: (dash.totalScans as number) || 0, sub: 'Tous packs confondus', icon: <Eye className="w-5 h-5 text-white" />, gradient: 'from-amber-500 to-orange-500' },
-                  { label: 'Lots générés', value: (dash.totalBatches as number) || 0, sub: `${(dash.totalBatchTags as number) || 0} tags`, icon: <Layers className="w-5 h-5 text-white" />, gradient: 'from-slate-600 to-slate-800' },
+                  { label: 'Total QR Codes', value: (dash.totalTags as number) || 0, sub: `${(dash.totalActivated as number) || 0} activés`, icon: <QrCode className="w-5 h-5 text-white" />, gradient: 'linear-gradient(135deg, #7C3AED, #A855F7)' },
+                  { label: "Taux d'activation", value: `${(dash.activationRate as number) || 0}%`, sub: `${(dash.totalTags as number) || 0} tags`, icon: <TrendingUp className="w-5 h-5 text-white" />, gradient: 'linear-gradient(135deg, #059669, #0D9488)' },
+                  { label: 'Total Scans', value: (dash.totalScans as number) || 0, sub: 'Tous packs confondus', icon: <Eye className="w-5 h-5 text-white" />, gradient: 'linear-gradient(135deg, #D97706, #EA580C)' },
+                  { label: 'Lots générés', value: (dash.totalBatches as number) || 0, sub: `${(dash.totalBatchTags as number) || 0} tags en lots`, icon: <Layers className="w-5 h-5 text-white" />, gradient: 'linear-gradient(135deg, #475569, #1E293B)' },
                 ].map((kpi, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
-                    className="rounded-2xl p-5 text-white shadow-lg"
-                    style={{ background: `linear-gradient(135deg, ${kpi.gradient})` }}
+                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}
+                    className="rounded-2xl p-5 text-white shadow-lg hover:shadow-xl transition-shadow"
+                    style={{ background: kpi.gradient }}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-white/70 uppercase tracking-wider">{kpi.label}</span>
+                      <span className="text-[10px] font-semibold text-white/60 uppercase tracking-wider">{kpi.label}</span>
                       <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">{kpi.icon}</div>
                     </div>
                     <p className="text-3xl font-black">{kpi.value}</p>
-                    <p className="text-xs text-white/70 mt-1">{kpi.sub}</p>
+                    <p className="text-xs text-white/60 mt-1">{kpi.sub}</p>
                   </motion.div>
                 ))}
               </div>
 
-              {/* Charts row */}
+              {/* ─── Charts Row ─── */}
               <div className="grid lg:grid-cols-2 gap-6 mb-8">
-                {/* Pie chart: pack breakdown */}
+                {/* Donut: Pack Breakdown */}
                 <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                   className="bg-white rounded-2xl border border-gray-200 p-6">
-                  <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <PieChart className="w-4 h-4 text-indigo-500" /> Répartition par Pack
+                  <h3 className="text-sm font-bold text-gray-800 mb-5 flex items-center gap-2">
+                    <PieChart className="w-4 h-4 text-violet-500" /> Répartition par Pack
                   </h3>
-                  <div className="flex items-center gap-6">
-                    {/* CSS Pie Chart */}
-                    <div className="relative w-32 h-32 flex-shrink-0">
-                      <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                        {(() => {
-                          const pb = (dash.packBreakdown as Record<string, number>) || {};
-                          const total = Object.values(pb).reduce((s, v) => s + v, 0) || 1;
-                          const COLORS = ['#E3B23C', '#7C3AED', '#059669', '#475569'];
-                          const LABELS: Record<string, string> = { pratique: 'Pratique', emotion: 'Emotion', evenementiel: 'Événement', immobilier: 'Immobilier' };
-                          const types = ['pratique', 'emotion', 'evenementiel', 'immobilier'];
-                          let cumPct = 0;
-                          return types.map((t, idx) => {
-                            const pct = ((pb[t] || 0) / total) * 100;
-                            const strokeDash = pct > 0 ? `${(pct / 100) * 100} ${100 - (pct / 100) * 100}` : '0 100';
-                            const r = 15.915;
-                            const offset = idx === 0 ? 0 : (cumPct / 100) * 2 * Math.PI;
-                            cumPct += pct;
-                            return (
-                              <circle key={t} cx="18" cy="18" r={r} fill="none" stroke={COLORS[idx]} strokeWidth="5"
-                                strokeDasharray={strokeDash} strokeDashoffset={offset} />
-                            );
-                          });
-                        })()}
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex items-center gap-8">
+                    {/* CSS Conic Donut */}
+                    <div className="relative w-36 h-36 flex-shrink-0">
+                      <div
+                        className="w-full h-full rounded-full"
+                        style={{
+                          background: (() => {
+                            const pb = (dash.packBreakdown as Record<string, number>) || {};
+                            const total = Object.values(pb).reduce((s, v) => s + v, 0) || 1;
+                            const COLORS = ['#E3B23C', '#7C3AED', '#059669', '#475569'];
+                            const types = ['pratique', 'emotion', 'evenementiel', 'immobilier'];
+                            let gradient = '';
+                            let cumPct = 0;
+                            types.forEach((t, idx) => {
+                              const pct = ((pb[t] || 0) / total) * 100;
+                              if (pct > 0) {
+                                gradient += `${COLORS[idx]} ${cumPct}% ${cumPct + pct}%`;
+                                cumPct += pct;
+                                if (idx < types.length - 1 && cumPct < 100) gradient += ', ';
+                              }
+                            });
+                            if (cumPct === 0) gradient = '#E5E7EB 0% 100%';
+                            return `conic-gradient(${gradient})`;
+                          })(),
+                        }}
+                      />
+                      {/* Inner white circle for donut hole */}
+                      <div className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-white flex items-center justify-center">
                         <div className="text-center">
-                          <p className="text-lg font-black text-gray-800">{(dash.totalTags as number) || 0}</p>
+                          <p className="text-xl font-black text-gray-800">{(dash.totalTags as number) || 0}</p>
                           <p className="text-[10px] text-gray-400">tags</p>
                         </div>
                       </div>
                     </div>
                     {/* Legend */}
-                    <div className="space-y-2.5 flex-1">
+                    <div className="space-y-3 flex-1">
                       {['pratique', 'emotion', 'evenementiel', 'immobilier'].map((t, i) => {
                         const pb = (dash.packBreakdown as Record<string, number>) || {};
                         const total = Object.values(pb).reduce((s, v) => s + v, 0) || 1;
@@ -1255,17 +1338,19 @@ switch (packType) {
                         const colors = ['#E3B23C', '#7C3AED', '#059669', '#475569'];
                         const labels = ['Pratique', 'Emotion', 'Événementiel', 'Immobilier'];
                         return (
-                          <div key={t} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[i] }} />
-                              <span className="text-sm text-gray-700">{labels[i]}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs font-bold text-gray-800 w-8 text-right">{pb[t] || 0}</span>
-                              <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: colors[i] }} />
+                          <div key={t} className="group cursor-default">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full ring-2 ring-offset-1 transition-all" style={{ backgroundColor: colors[i], ringColor: colors[i] + '40' }} />
+                                <span className="text-sm text-gray-700 font-medium">{labels[i]}</span>
                               </div>
-                              <span className="text-xs text-gray-400 w-8">{pct}%</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-gray-900">{pb[t] || 0}</span>
+                                <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
+                              </div>
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: colors[i] }} />
                             </div>
                           </div>
                         );
@@ -1274,59 +1359,149 @@ switch (packType) {
                   </div>
                 </motion.div>
 
-                {/* Bar chart: daily activity */}
+                {/* Bar chart: Daily Activity */}
                 <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                   className="bg-white rounded-2xl border border-gray-200 p-6">
                   <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-indigo-500" /> Activité (14 jours)
+                    <Activity className="w-4 h-4 text-violet-500" /> Activité (14 jours)
                   </h3>
-                  <div className="h-44 flex items-end gap-1">
-                    {((dash.dailyActivity as Array<{ date: string; created: number; scanned: number }>) || []).map((d, i) => {
-                      const maxCreated = Math.max(...((dash.dailyActivity as Array<{ created: number }>) || []).map(x => x.created), 1);
-                      const hCreated = Math.max((d.created / maxCreated) * 100, 4);
-                      const hScanned = Math.max((d.scanned / maxCreated) * 60, 2);
-                      const label = d.date.slice(5);
-                      return (
-                        <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5">
-                          <div className="w-full flex flex-col items-center justify-end" style={{ height: '140px' }}>
-                            <div className="w-full max-w-[20px] rounded-t bg-indigo-500 transition-all" style={{ height: `${hCreated}%` }} title={`${d.created} créés`} />
-                            <div className="w-full max-w-[20px] rounded-t bg-amber-400 transition-all" style={{ height: `${hScanned}%` }} title={`${d.scanned} scannés`} />
+                  {(() => {
+                    const activity = (dash.dailyActivity as Array<{ date: string; created: number; scanned: number }>) || [];
+                    const maxVal = Math.max(...activity.map((d) => Math.max(d.created, d.scanned)), 1);
+                    const hasData = activity.some((d) => d.created > 0 || d.scanned > 0);
+                    return (
+                      <div className="relative">
+                        {hasData ? (
+                          <>
+                            <div className="h-44 flex items-end gap-[3px]">
+                              {activity.map((d) => {
+                                const hC = Math.max((d.created / maxVal) * 100, 0);
+                                const hS = Math.max((d.scanned / maxVal) * 100, 0);
+                                const label = d.date.slice(5);
+                                return (
+                                  <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                                    {/* Tooltip */}
+                                    <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
+                                      <p className="font-bold">{label}</p>
+                                      <p className="text-amber-400">+{d.created} créés</p>
+                                      <p className="text-violet-400">+{d.scanned} scannés</p>
+                                    </div>
+                                    <div className="w-full flex flex-col items-center justify-end" style={{ height: '140px' }}>
+                                      {hS > 0 && <div className="w-full max-w-[18px] rounded-t-md bg-violet-400 transition-all duration-300 group-hover:bg-violet-500" style={{ height: `${hS}%` }} />}
+                                      {hC > 0 && <div className="w-full max-w-[18px] rounded-t-md bg-amber-400 transition-all duration-300 group-hover:bg-amber-500" style={{ height: `${hC}%` }} />}
+                                      {hC === 0 && hS === 0 && <div className="w-full max-w-[18px] rounded-t-md bg-gray-100" style={{ height: '2px' }} />}
+                                    </div>
+                                    <span className="text-[9px] text-gray-400 mt-0.5">{label}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+                              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /><span className="text-[10px] text-gray-500">Créés</span></div>
+                              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-400" /><span className="text-[10px] text-gray-500">Scannés</span></div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="h-44 flex items-center justify-center">
+                            <p className="text-sm text-gray-400">Aucune activité sur les 14 derniers jours</p>
                           </div>
-                          <span className="text-[10px] text-gray-400">{label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-indigo-500" /><span className="text-[10px] text-gray-500">Créés</span></div>
-                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-400" /><span className="text-[10px] text-gray-500">Scannés</span></div>
-                  </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </motion.div>
               </div>
 
-              {/* Recent activity row */}
+              {/* ─── Bottom Row: Batches + Scans ─── */}
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Recent batches */}
+                {/* Recent Batches */}
                 <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                   className="bg-white rounded-2xl border border-gray-200 p-6">
                   <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-500" /> Lots récents
+                    <Layers className="w-4 h-4 text-violet-500" /> Lots récents
                   </h3>
                   {((dash.recentBatches as Array<Record<string, unknown>>) || []).length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-6">Aucun lot</p>
                   ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
                       {(dash.recentBatches as Array<Record<string, unknown>>).map((b) => {
                         const packInfo = PACKS.find((p) => p.id === b.packType);
+                        const isExpanded = dashExpandedBatch === (b.id as string);
                         return (
-                          <div key={b.id as string} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
-                              {packInfo?.icon}
+                          <div key={b.id as string}>
+                            <div
+                              className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group"
+                              onClick={() => handleExpandBatch(b.id as string)}
+                            >
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm flex-shrink-0" style={{ backgroundColor: (packInfo?.color || '#999') + '15', color: packInfo?.color || '#999' }}>
+                                {packInfo?.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-800 truncate">{b.name as string}</p>
+                                <p className="text-xs text-gray-400">{(b.tagCount as number)} tags · {packInfo?.subtitle}</p>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <a
+                                  href={`/api/batches/${b.id as string}/pdf`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-400 hover:text-gray-700"
+                                  title="Télécharger PDF"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                </a>
+                                <a
+                                  href={`/api/batches/${b.id as string}/csv`}
+                                  download
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-400 hover:text-gray-700"
+                                  title="Télécharger CSV"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </a>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-800 truncate">{b.name as string}</p>
-                              <p className="text-xs text-gray-400">{(b.tagCount as number)} tags · {packInfo?.subtitle}</p>
-                            </div>
+                            {/* Expanded tag list */}
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="ml-12 mr-2 mb-2 p-3 bg-gray-50 rounded-xl border border-gray-100 max-h-40 overflow-y-auto">
+                                    {dashBatchLoading ? (
+                                      <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
+                                    ) : dashBatchTags.length === 0 ? (
+                                      <p className="text-xs text-gray-400">Aucun tag</p>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {dashBatchTags.map((tag) => (
+                                          <span
+                                            key={tag.reference}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold ${
+                                              tag.status === 'activated'
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : 'bg-amber-100 text-amber-700'
+                                            }`}
+                                          >
+                                            <span className={`w-1.5 h-1.5 rounded-full ${tag.status === 'activated' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                            {tag.reference}
+                                          </span>
+                                        ))}
+                                        {dashBatchTags.length >= 100 && (
+                                          <span className="text-[10px] text-gray-400 px-1">+ plus de 100 tags</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })}
@@ -1334,28 +1509,47 @@ switch (packType) {
                   )}
                 </motion.div>
 
-                {/* Recent scans */}
+                {/* Recent Scans */}
                 <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                   className="bg-white rounded-2xl border border-gray-200 p-6">
                   <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-indigo-500" /> Scans récents
+                    <Eye className="w-4 h-4 text-violet-500" /> Scans récents
                   </h3>
                   {((dash.recentScans as Array<Record<string, unknown>>) || []).length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-6">Aucun scan</p>
+                    <div className="flex flex-col items-center py-8">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <Eye className="w-5 h-5 text-gray-300" />
+                      </div>
+                      <p className="text-sm text-gray-400">Aucun scan enregistré</p>
+                      <p className="text-xs text-gray-300 mt-1">Les scans apparaîtront ici automatiquement</p>
+                    </div>
                   ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
                       {(dash.recentScans as Array<Record<string, unknown>>).map((s) => {
                         const packInfo = PACKS.find((p) => p.id === s.packType);
+                        const timeAgo = getTimeAgo(s.createdAt as string);
                         return (
-                          <div key={s.id as string} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: (packInfo?.color || '#999') + '20', color: packInfo?.color || '#999' }}>
+                          <div key={s.id as string} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm flex-shrink-0" style={{ backgroundColor: (packInfo?.color || '#999') + '15', color: packInfo?.color || '#999' }}>
                               {packInfo?.icon}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-gray-800 font-mono">{s.reference as string}</p>
-                              <p className="text-xs text-gray-400">{packInfo?.subtitle}{s.location ? ` · ${s.location}` : ''}</p>
+                              <p className="text-xs text-gray-400">
+                                {packInfo?.subtitle}
+                                {s.location ? ` · ${s.location}` : ''}
+                              </p>
                             </div>
-                            <span className="text-[10px] text-gray-400 whitespace-nowrap">{new Date(s.createdAt as string).toLocaleDateString('fr-FR')}</span>
+                            <div className="flex flex-col items-end flex-shrink-0">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                                s.tagStatus === 'activated' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {s.tagStatus === 'activated' ? 'Actif' : 'Stock'}
+                              </span>
+                              <span className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" />{timeAgo}
+                              </span>
+                            </div>
                           </div>
                         );
                       })}
@@ -1363,9 +1557,66 @@ switch (packType) {
                   )}
                 </motion.div>
               </div>
+
+              {/* Status Distribution Bar */}
+              {dash.statusBreakdown && (dash.statusBreakdown as Record<string, number>) && Object.keys(dash.statusBreakdown as Record<string, number>).length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mt-8">
+                  <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                    <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-violet-500" /> Distribution des statuts
+                    </h3>
+                    {(() => {
+                      const sb = (dash.statusBreakdown as Record<string, number>) || {};
+                      const total = Object.values(sb).reduce((a, b) => a + b, 0) || 1;
+                      const STATUS_COLORS: Record<string, string> = {
+                        in_stock: '#D97706',
+                        activated: '#059669',
+                        lost: '#DC2626',
+                        distributed: '#7C3AED',
+                      };
+                      const STATUS_LABELS: Record<string, string> = {
+                        in_stock: 'En stock',
+                        activated: 'Activé',
+                        lost: 'Perdu',
+                        distributed: 'Distribué',
+                      };
+                      return (
+                        <>
+                          <div className="flex h-4 rounded-full overflow-hidden mb-4">
+                            {Object.entries(sb).map(([status, count]) => {
+                              const pct = (count / total) * 100;
+                              return (
+                                <div
+                                  key={status}
+                                  className="transition-all duration-700 first:rounded-l-full last:rounded-r-full"
+                                  style={{ width: `${pct}%`, backgroundColor: STATUS_COLORS[status] || '#9CA3AF' }}
+                                  title={`${STATUS_LABELS[status] || status}: ${count} (${Math.round(pct)}%)`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-wrap gap-4">
+                            {Object.entries(sb).map(([status, count]) => (
+                              <div key={status} className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: STATUS_COLORS[status] || '#9CA3AF' }} />
+                                <span className="text-xs text-gray-600">{STATUS_LABELS[status] || status}</span>
+                                <span className="text-xs font-bold text-gray-900">{count}</span>
+                                <span className="text-xs text-gray-400">({Math.round((count / total) * 100)}%)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </motion.div>
+              )}
             </>
           ) : (
-            <p className="text-center text-gray-400 py-12">Erreur de chargement du dashboard</p>
+            <div className="text-center py-12">
+              <AlertCircle className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-400">Erreur de chargement du dashboard</p>
+            </div>
           )}
         </div>
       </section>

@@ -126,6 +126,38 @@ Stage Summary:
 - Verified: 0 console errors, all routes 200, PDF is valid PDF v1.3, CSV has 20 rows + header
 - Full E2E: create batch → PDF download (binary) → CSV download → dashboard KPIs
 ---
+Task ID: 11
+Agent: Main
+Task: Étape 5 - Dashboard Qrioo complet
+
+Work Log:
+- Rewrote /api/dashboard/route.ts:
+  - Fixed daily activity: replaced Prisma groupBy on DateTime (broken in SQLite) with JS-side aggregation
+  - Added pack type filter query param (?pack=pratique)
+  - Added statusBreakdown (groupBy status)
+  - Added tagStatus to recentScans
+  - Increased recentBatches to 8, recentScans to 10
+- Created /api/batches/[id]/tags/route.ts for batch detail expansion
+- Rewrote Étape 5 UI section in page.tsx:
+  - Filter pills row: "Tous les packs" + 4 pack type buttons with colored dots
+  - Refresh button (RefreshCw icon, spinning animation)
+  - Fixed donut chart: replaced broken SVG circles with CSS conic-gradient
+  - Enhanced bar chart: hover tooltips with date/created/scanned, empty state message
+  - Batch detail expansion: click a batch → animated panel with tag list (QROO-refs with status badges)
+  - PDF/CSV quick action buttons on each batch row in dashboard
+  - Status distribution bar: colored segmented bar with labels
+  - Time-ago helper (getTimeAgo: "à l'instant", "il y a 3h", "il y a 2j")
+  - Tag status badges in scan list (Actif/Stock)
+  - Better empty states for scans
+  - All indigo colors replaced with violet for consistency
+
+Stage Summary:
+- API: src/app/api/dashboard/route.ts (filter, statusBreakdown, fixed dailyActivity)
+- API: src/app/api/batches/[id]/tags/route.ts (new, batch tag list)
+- UI: Complete dashboard with filter, refresh, donut, bar chart, batch expand, status bar
+- Verified: 0 console errors, all routes 200, donut renders correctly, filter works
+- Full E2E: dashboard loads → KPIs show → filter by pack → expand batch → tags API returns 20 tags
+---
 Task ID: 9
 Agent: Main
 Task: Étape 4 - Génération de lots (Batches) avec export PDF/CSV
