@@ -1,0 +1,7 @@
+{
+  "name": "qrioo-dev-server",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--max-old-space-size=2048' npx next dev -p 3000 --webpack"
+  }
+}

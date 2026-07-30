@@ -1,186 +1,26 @@
 ---
-Task ID: 1
-Agent: Main
-Task: Clone repo qrtagsori, analyze stack, implement Qrioo Etapes 1 & 2
-
-Work Log:
-- Cloned https://github.com/topmuch/qrtagsori to /home/z/qrtags-clone
-- Analyzed existing codebase: Next.js 16, Prisma (SQLite), Tailwind CSS 4, shadcn/ui
-- Found schema already partially migrated in cloned repo (packType, contentType, contentUrl, contentMetadata, batchId on Baggage; Batch model; GuestMessage model)
-- Found scan page + API route already implemented in cloned repo with dynamic switch/case on packType
-- Found all 4 Pack components already built (PackEmotion, PackImmobilier, PackEvenementiel, PackPratique)
-
-Stage Summary:
-- The cloned repo already had ~80% of the transformation done
-- Key files analyzed: prisma/schema.prisma, src/app/api/scan/[reference]/route.ts, src/app/scan/[reference]/page.tsx, src/components/scan/*.tsx
----
-Task ID: 4
-Agent: Main + subagent
-Task: Set up Prisma schema in my-project with all Qrioo models
-
-Work Log:
-- Wrote complete Prisma schema with 8 models: Agency, Baggage (with Qrioo multi-usage fields), ScanLog, Batch, GuestMessage, Setting, Notification, Message
-- Ran db:push and db:generate successfully
-
-Stage Summary:
-- Schema at /home/z/my-project/prisma/schema.prisma
-- DB synced at /home/z/my-project/db/custom.db
----
-Task ID: 5
-Agent: subagent
-Task: Create scan API route with dynamic pack type routing
-
-Work Log:
-- Created /home/z/my-project/src/lib/prisma.ts (Prisma singleton)
-- Created /home/z/my-project/src/app/api/scan/[reference]/route.ts with GET/POST handlers
-- Fixed import issue (named vs default export)
-
-Stage Summary:
-- API returns correct JSON for all 4 pack types (pratique, emotion, evenementiel, immobilier)
-- Evenementiel POST handler creates guest messages
-- Scan count incremented asynchronously
----
 Task ID: 6
-Agent: subagent
-Task: Create all 4 scan pack components
-
-Work Log:
-- Created PackEmotion.tsx (animated envelope, audio player with waveform)
-- Created PackImmobilier.tsx (property card, gallery, contact form)
-- Created PackEvenementiel.tsx (event header, guest book wall, message form)
-- Created PackPratique.tsx (lost object finder form, WhatsApp redirect)
-
-Stage Summary:
-- All 4 components in /home/z/my-project/src/components/scan/
----
-Task ID: 7
 Agent: Main
-Task: Create landing page with interactive Qrioo demo
+Task: Transform Qrioo from demo page into multi-role SaaS app (Superadmin, Admin Agence, Scan Page)
 
 Work Log:
-- Built comprehensive landing page at / (src/app/page.tsx)
-- Hero section with stats, 4 pack cards, interactive demo section with tab switcher
-- Scan API tester with JSON response display
-- Migration summary section (Etape 1)
-- Routeur dynamique code preview (Etape 2)
-- Fixed unicode encoding issues
-- Seeded test data for all 4 pack types
-- Verified all 4 API endpoints return correct data
+- Added User model to Prisma schema (email, password, role SUPERADMIN/ADMIN_AGENCE, agencyId)
+- Created JWT auth system (jose + bcryptjs): /api/auth/login, /api/auth/me, /api/auth/seed-users
+- Created Zustand auth store with localStorage token persistence
+- Built LoginScreen component with split-panel design, demo account buttons
+- Built AppSidebar with collapsible navigation, role-based menu items
+- Built DashboardView with 5 KPI cards (superadmin) / 4 cards (admin agence), pack breakdown donut, activity bar chart, recent batches/scans, status distribution
+- Built AgencesView (superadmin-only) with agency cards, create agency form
+- Built LotsView for batch management with create form, expandable tag lists, PDF/CSV links
+- Built ScanPageView to simulate what QR scanners see
+- Updated dashboard API with role-based filtering (agencyId for ADMIN_AGENCE, global for SUPERADMIN)
+- Updated agencies API (GET list + POST create, superadmin-only)
+- Rewrote page.tsx as thin auth router: Login → App layout with sidebar + view switching
 
 Stage Summary:
-- Page renders correctly with all sections
-- Interactive pack demos work (tab switching, animations)
-- API scan test shows JSON responses
-- Browser-verified at http://localhost:3000/
----
-Task ID: 8
-Agent: Main + 4 subagents
-Task: Étape 3 - Page d'activation/configuration dynamique par pack_type
-
-Work Log:
-- Created /api/activate/[reference]/route.ts with GET (check status) + POST (activate) handlers
-- POST handler uses Zod validation schemas per pack_type (pratiqueSchema, emotionSchema, evenementielSchema, immobilierSchema)
-- Each schema validates different fields and stores data appropriately (customData for pratique, contentMetadata for emotion/evenementiel/immobilier)
-- Created /api/seed-activate/route.ts to create/reset 4 demo tags (one per pack_type)
-- Created 4 activation form components via subagents:
-  - ActivatePratique.tsx (amber theme, owner info + collapsible object description)
-  - ActivateEmotion.tsx (purple theme, sender/recipient, text/audio radio, message textarea)
-  - ActivateEvenementiel.tsx (emerald theme, event info, date, type select, guest book switch)
-  - ActivateImmobilier.tsx (slate theme, property info, feature tags, description & contact)
-- Integrated Étape 3 section into page.tsx with tab switcher, success/error banners, reset button
-- Fixed Turbopack+Prisma compatibility by adding --webpack flag to dev script
-- Fixed next.config.ts with serverExternalPackages for @prisma/client
-- API tested: all 4 pack types activate successfully (200 OK)
-- Browser-verified: all 4 forms render, submit, and show success feedback
-
-Stage Summary:
-- API: src/app/api/activate/[reference]/route.ts (GET+POST with Zod per pack_type)
-- Seed: src/app/api/seed-activate/route.ts
-- Components: src/components/activate/{ActivatePratique,ActivateEmotion,ActivateEvenementiel,ActivateImmobilier}.tsx
-- Dev script updated: --webpack flag for Prisma compatibility
-- Full E2E flow verified: seed → fill form → submit → success banner → reset → repeat
----
-Task ID: 10
-Agent: Main
-Task: Étape 4 upgrade - Real PDF generation + Dashboard API
-
-Work Log:
-- Installed jspdf@4.2.1 + @types/jspdf for binary PDF generation
-- Rewrote /api/batches/[id]/pdf/route.ts: replaced HTML output with real A4 PDF using jsPDF
-  - 4x4 QR grid per page (16 per page), multi-page support
-  - Colored header bar per pack_type with batch name, pack label, page numbers
-  - QR codes rendered from PNG buffers, with reference text + status badge per cell
-  - Footer with generation date and Qrioo branding
-  - Proper Content-Disposition: attachment for download
-- Created /api/dashboard/route.ts for Étape 5 KPIs:
-  - Total tags, activated, batches, scans, activation rate
-  - Pack breakdown (groupBy packType)
-  - Daily activity (14-day window: created + scanned per day)
-  - Recent batches (last 5) with tag counts
-  - Recent scans (last 8) with reference, packType, location
-
-Stage Summary:
-- PDF: src/app/api/batches/[id]/pdf/route.ts (real binary PDF via jsPDF, 200, 541KB for 20 tags / 2 pages)
-- CSV: src/app/api/batches/[id]/csv/route.ts (unchanged, working)
-- Dashboard: src/app/api/dashboard/route.ts (new, all KPIs)
-- Verified: 0 console errors, all routes 200, PDF is valid PDF v1.3, CSV has 20 rows + header
-- Full E2E: create batch → PDF download (binary) → CSV download → dashboard KPIs
----
-Task ID: 11
-Agent: Main
-Task: Étape 5 - Dashboard Qrioo complet
-
-Work Log:
-- Rewrote /api/dashboard/route.ts:
-  - Fixed daily activity: replaced Prisma groupBy on DateTime (broken in SQLite) with JS-side aggregation
-  - Added pack type filter query param (?pack=pratique)
-  - Added statusBreakdown (groupBy status)
-  - Added tagStatus to recentScans
-  - Increased recentBatches to 8, recentScans to 10
-- Created /api/batches/[id]/tags/route.ts for batch detail expansion
-- Rewrote Étape 5 UI section in page.tsx:
-  - Filter pills row: "Tous les packs" + 4 pack type buttons with colored dots
-  - Refresh button (RefreshCw icon, spinning animation)
-  - Fixed donut chart: replaced broken SVG circles with CSS conic-gradient
-  - Enhanced bar chart: hover tooltips with date/created/scanned, empty state message
-  - Batch detail expansion: click a batch → animated panel with tag list (QROO-refs with status badges)
-  - PDF/CSV quick action buttons on each batch row in dashboard
-  - Status distribution bar: colored segmented bar with labels
-  - Time-ago helper (getTimeAgo: "à l'instant", "il y a 3h", "il y a 2j")
-  - Tag status badges in scan list (Actif/Stock)
-  - Better empty states for scans
-  - All indigo colors replaced with violet for consistency
-
-Stage Summary:
-- API: src/app/api/dashboard/route.ts (filter, statusBreakdown, fixed dailyActivity)
-- API: src/app/api/batches/[id]/tags/route.ts (new, batch tag list)
-- UI: Complete dashboard with filter, refresh, donut, bar chart, batch expand, status bar
-- Verified: 0 console errors, all routes 200, donut renders correctly, filter works
-- Full E2E: dashboard loads → KPIs show → filter by pack → expand batch → tags API returns 20 tags
----
-Task ID: 9
-Agent: Main
-Task: Étape 4 - Génération de lots (Batches) avec export PDF/CSV
-
-Work Log:
-- Installed `qrcode` npm package for server-side QR code generation
-- Created src/lib/qr.ts helper (generateQRDataUrl, generateQRBuffer, generateUniqueReference, PACK_COLORS)
-- Created POST /api/batches (Zod validation, create Batch + N Baggage tags with unique refs QROO-YY-XXXXXX)
-- Created GET /api/batches (list batches with statusCounts per status)
-- Created GET /api/batches/[id]/pdf (HTML with A4 4x4 grid of QR code images, colored by pack_type)
-- Created GET /api/batches/[id]/csv (CSV with BOM, semicolon separator, Reference;Pack Type;Statut;Date;URL)
-- Integrated Étape 4 section in page.tsx:
-  - Batch creation form (name, pack_type select, quantity spinbutton)
-  - Success/error feedback banners
-  - Batch list with pack type badge, tag counts (en stock/activés), date
-  - PDF and CSV download links per batch
-- Fixed duplicate `Layers` import in page.tsx
-- API tested: POST creates batch+tags (200), GET lists with statusCounts (200), PDF renders 4 QR codes with data URLs, CSV exports with BOM
-- Browser-verified: form submission creates batch, list updates, PDF link opens A4 grid page
-
-Stage Summary:
-- API: src/app/api/batches/route.ts (POST create + GET list)
-- API: src/app/api/batches/[id]/pdf/route.ts (A4 printable HTML grid)
-- API: src/app/api/batches/[id]/csv/route.ts (CSV with BOM)
-- Helper: src/lib/qr.ts
-- Full E2E: create batch → see in list → open PDF → download CSV
+- Full authentication system with JWT tokens and bcrypt password hashing
+- Role-based access: SUPERADMIN sees all data + agencies management, ADMIN_AGENCE sees only their agency data
+- Login page with beautiful split-panel design and 3 demo accounts (1 superadmin, 2 admin agence)
+- Sidebar navigation with 5 views: Dashboard, Agences, Lots QR, Mes Tags, Page Scan
+- E2E verified: Login flow → Dashboard with real KPI data (116 tags, 2 agencies, 8 batches, 1 scan)
+- Dashboard API returns role-filtered data with pack breakdown, daily activity, recent batches/scans
