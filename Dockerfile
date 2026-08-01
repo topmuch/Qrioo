@@ -28,5 +28,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV DATABASE_URL=file:/app/data/qrioo.db
 
-# Start command - migrate db and start server
-CMD sh -c "mkdir -p /app/data && export DATABASE_URL=file:/app/data/qrioo.db && npx prisma db push --skip-generate 2>/dev/null || true && exec node .next/standalone/server.js"
+# Start command - migrate db, seed users and start server
+CMD sh -c "mkdir -p /app/data && export DATABASE_URL=file:/app/data/qrioo.db && npx prisma db push --skip-generate 2>/dev/null || true && node scripts/create-admin.cjs 2>/dev/null || true && exec node .next/standalone/server.js"
