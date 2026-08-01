@@ -8,6 +8,7 @@ import {
   AlertCircle, Loader2, Plus,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
+import QRGenerator from './QRGenerator';
 
 const PACKS = [
   { id: 'pratique', title: 'Pratique', subtitle: 'Objets perdus', color: '#E3B23C', icon: <Package className="w-4 h-4" /> },
@@ -278,6 +279,11 @@ export default function DashboardView() {
             )}
           </div>
         </motion.div>
+      </div>
+
+      {/* QR Generator */}
+      <div className="mb-8">
+        <QRGenerator />
       </div>
 
       {/* Bottom row: Batches + Scans */}
