@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore, type AppView } from '@/store/auth';
-import LoginScreen from '@/components/auth/LoginScreen';
+import LandingPage from '@/components/landing/LandingPage';
 import AppSidebar from '@/components/layout/AppSidebar';
 import DashboardView from '@/components/dashboard/DashboardView';
 import AgencesView from '@/components/dashboard/AgencesView';
@@ -32,7 +32,6 @@ export default function HomePage() {
           setUser(d.user);
           setToken(savedToken);
         } else {
-          // Token invalid, clear it
           setToken(null);
         }
       })
@@ -41,8 +40,6 @@ export default function HomePage() {
       })
       .finally(() => setLoading(false));
   }, []);
-
-  // Note: seed users via POST /api/auth/seed-users separately
 
   // Loading state
   if (isLoading) {
@@ -56,9 +53,9 @@ export default function HomePage() {
     );
   }
 
-  // Not authenticated → Login screen
+  // Not authenticated → Landing page with login modal
   if (!isAuthenticated || !user) {
-    return <LoginScreen />;
+    return <LandingPage />;
   }
 
   // Authenticated → App layout
@@ -69,7 +66,7 @@ export default function HomePage() {
       case 'lots': return <LotsView />;
       case 'tags': return <TagsView />;
       case 'scan': return <ScanPageView />;
-      case 'settings': return <DashboardView />; // placeholder
+      case 'settings': return <DashboardView />;
       default: return <DashboardView />;
     }
   };
