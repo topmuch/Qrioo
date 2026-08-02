@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion';
 import {
   QrCode, Shield, Zap, BarChart3, Building2, ScanLine,
@@ -10,6 +10,18 @@ import {
   Check, Star, ArrowUpRight,
 } from 'lucide-react';
 import { useAuthStore, type AuthUser } from '@/store/auth';
+import PackDetailPage from '@/components/landing/packs/PackDetailPage';
+import FooterPages from '@/components/landing/pages/FooterPages';
+import DemoSection from '@/components/landing/DemoSection';
+
+/* ================================================================== */
+/*  TYPES                                                              */
+/* ================================================================== */
+
+type SubPage =
+  | null
+  | { type: 'pack'; packType: 'pratique' | 'emotion' | 'evenementiel' | 'immobilier' }
+  | { type: 'page'; pageId: string };
 
 /* ================================================================== */
 /*  CONSTANTS                                                          */
@@ -29,6 +41,7 @@ const QRIOO = {
 const PACKS = [
   {
     name: 'Pratique',
+    slug: 'pratique',
     icon: ScanLine,
     color: QRIOO.amber,
     gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
@@ -39,16 +52,18 @@ const PACKS = [
   },
   {
     name: 'Émotion',
+    slug: 'emotion',
     icon: Heart,
     color: QRIOO.purple,
     gradient: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 100%)',
     bgLight: 'rgba(124,58,237,0.08)',
     desc: 'Messages, souvenirs, témoignages.',
     detail: 'Créez des connexions émotionnelles uniques avec des contenus personnalisés.',
-    examples: ["Livre d'or", 'Vœux', 'Dédicaces', 'Témoignages'],
+    examples: ["Livre d'or", 'Voeux', 'Dédicaces', 'Témoignages'],
   },
   {
     name: 'Événementiel',
+    slug: 'evenementiel',
     icon: PartyPopper,
     color: QRIOO.emerald,
     gradient: 'linear-gradient(135deg, #34D399 0%, #059669 100%)',
@@ -59,6 +74,7 @@ const PACKS = [
   },
   {
     name: 'Immobilier',
+    slug: 'immobilier',
     icon: Home,
     color: QRIOO.slate,
     gradient: 'linear-gradient(135deg, #94A3B8 0%, #475569 100%)',
@@ -72,24 +88,9 @@ const PACKS = [
 /* ─── How it works ──────────────────────────────────────────────── */
 
 const STEPS = [
-  {
-    num: '01',
-    title: 'Choisissez votre pack',
-    desc: 'Sélectionnez parmi nos 4 packs spécialisés : Pratique, Émotion, Événementiel ou Immobilier.',
-    icon: Layers,
-  },
-  {
-    num: '02',
-    title: 'Générez vos QR codes',
-    desc: 'Configurez la quantité et générez vos QR codes personnalisés en un clic.',
-    icon: Sparkles,
-  },
-  {
-    num: '03',
-    title: 'Activez et suivez',
-    desc: 'Activez le contenu de chaque QR code et suivez les scans en temps réel.',
-    icon: BarChart3,
-  },
+  { num: '01', title: 'Choisissez votre pack', desc: 'Sélectionnez parmi nos 4 packs spécialisés : Pratique, Émotion, Événementiel ou Immobilier.', icon: Layers },
+  { num: '02', title: 'Générez vos QR codes', desc: 'Configurez la quantité et générez vos QR codes personnalisés en un clic.', icon: Sparkles },
+  { num: '03', title: 'Activez et suivez', desc: 'Activez le contenu de chaque QR code et suivez les scans en temps réel.', icon: BarChart3 },
 ];
 
 /* ─── Features ──────────────────────────────────────────────────── */
@@ -106,27 +107,9 @@ const FEATURES = [
 /* ─── Testimonials ──────────────────────────────────────────────── */
 
 const TESTIMONIALS = [
-  {
-    name: 'Aminata Diallo',
-    role: 'Directrice, Voyages Sérénité',
-    text: 'Qrioo a transformé notre gestion des bagages perdus. Nos clients scannent et nous retrouvent leurs affaires en quelques minutes.',
-    avatar: 'AD',
-    color: QRIOO.amber,
-  },
-  {
-    name: 'Omar Ba',
-    role: 'Agent, Azur Immo',
-    text: 'Les QR codes sur nos panneaux immobiliers génèrent 3x plus de contacts. Un vrai game-changer pour nos ventes.',
-    avatar: 'OB',
-    color: QRIOO.slate,
-  },
-  {
-    name: 'Fatou Sow',
-    role: 'Wedding Planner',
-    text: 'Le pack Événementiel est magique. Les invités scannent, laissent des messages, et les couples gardent un souvenir unique.',
-    avatar: 'FS',
-    color: QRIOO.purple,
-  },
+  { name: 'Aminata Diallo', role: 'Directrice, Voyages Sérénité', text: 'Qrioo a transformé notre gestion des bagages perdus. Nos clients scannent et nous retrouvons leurs affaires en quelques minutes.', avatar: 'AD', color: QRIOO.amber },
+  { name: 'Omar Ba', role: 'Agent, Azur Immo', text: 'Les QR codes sur nos panneaux immobiliers génèrent 3x plus de contacts. Un vrai game-changer pour nos ventes.', avatar: 'OB', color: QRIOO.slate },
+  { name: 'Fatou Sow', role: 'Wedding Planner', text: "Le pack Événementiel est magique. Les invités scannent, laissent des messages, et les couples gardent un souvenir unique.", avatar: 'FS', color: QRIOO.purple },
 ];
 
 /* ─── Demo accounts ─────────────────────────────────────────────── */
@@ -192,6 +175,7 @@ export default function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [subPage, setSubPage] = useState<SubPage>(null);
   const { login } = useAuthStore();
 
   const heroRef = useRef(null);
@@ -199,8 +183,12 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const [mounted] = useState(() => typeof window !== 'undefined');
+
+  // Scroll to top when sub-page changes
+  useEffect(() => {
+    if (subPage) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [subPage]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,6 +218,39 @@ export default function LandingPage() {
     setPassword(account.password);
   };
 
+  const handleDemoAutoLogin = useCallback((demoEmail: string, demoPassword: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setShowLogin(true);
+    // Auto-submit after a short delay
+    setTimeout(() => {
+      const form = document.querySelector('form[data-login-form]') as HTMLFormElement;
+      if (form) form.requestSubmit();
+    }, 100);
+  }, []);
+
+  const goBack = useCallback(() => {
+    setSubPage(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // ── Sub-page: Pack detail ──
+  if (subPage?.type === 'pack') {
+    return (
+      <PackDetailPage
+        packType={subPage.packType}
+        onBack={goBack}
+        onCTA={() => setShowLogin(true)}
+      />
+    );
+  }
+
+  // ── Sub-page: Footer pages ──
+  if (subPage?.type === 'page') {
+    return <FooterPages pageId={subPage.pageId} onBack={goBack} />;
+  }
+
+  // ── Main landing page ──
   return (
     <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
       {/* ============================================================= */}
@@ -247,8 +268,9 @@ export default function LandingPage() {
             </div>
             <span className="text-xl font-black text-gray-900 tracking-tight">Qrioo</span>
           </div>
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-6">
             <a href="#packs" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Packs</a>
+            <a href="#demo" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Démo</a>
             <a href="#how" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Comment ça marche</a>
             <a href="#features" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Fonctionnalités</a>
             <a href="#testimonials" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Témoignages</a>
@@ -267,21 +289,17 @@ export default function LandingPage() {
       {/*  HERO                                                          */}
       {/* ============================================================= */}
       <section ref={heroRef} className="relative min-h-screen flex items-center pt-18">
-        {/* Background elements */}
         <div className="absolute inset-0 overflow-hidden">
-          {/* Gradient mesh */}
           <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
             style={{ background: 'radial-gradient(circle, #A855F7, transparent 70%)' }} />
           <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] rounded-full opacity-15 blur-[100px]"
             style={{ background: 'radial-gradient(circle, #F59E0B, transparent 70%)' }} />
-          {/* Grid pattern */}
           <div className="absolute inset-0 opacity-[0.025]"
             style={{ backgroundImage: 'radial-gradient(circle, #7C3AED 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
         </div>
 
         <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-20">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left content */}
             <div>
               {mounted && (
                 <motion.div variants={stagger} initial="hidden" animate="visible">
@@ -328,15 +346,14 @@ export default function LandingPage() {
                       <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                     </button>
                     <button
-                      onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}
+                      onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
                       className="w-full sm:w-auto group flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl font-bold text-gray-700 text-base border-2 border-gray-200 hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50/50 transition-all duration-300"
                     >
                       <Play className="w-4 h-4" />
-                      Voir comment ça marche
+                      Essayer la démo
                     </button>
                   </motion.div>
 
-                  {/* Trust indicators */}
                   <motion.div variants={fadeUp} transition={{ duration: 0.6, delay: 0.4 }} className="mt-12 flex items-center gap-6">
                     <div className="flex -space-x-2.5">
                       {['AD', 'OB', 'FS', 'MK'].map((initials, i) => (
@@ -360,7 +377,6 @@ export default function LandingPage() {
               )}
             </div>
 
-            {/* Right visual — Hero illustration */}
             {mounted && (
               <motion.div
                 initial={{ opacity: 0, x: 40, scale: 0.95 }}
@@ -369,15 +385,11 @@ export default function LandingPage() {
                 className="relative hidden lg:block"
               >
                 <div className="relative">
-                  {/* Main image */}
                   <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-purple-200/30 border border-white/60">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/hero-illustration.png" alt="Qrioo Dashboard" className="w-full h-auto" />
-                    {/* Overlay gradient */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
                   </div>
 
-                  {/* Floating card — QR scan count */}
                   <motion.div
                     animate={{ y: [0, -8, 0] }}
                     transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
@@ -392,7 +404,6 @@ export default function LandingPage() {
                     </div>
                   </motion.div>
 
-                  {/* Floating card — QR generated */}
                   <motion.div
                     animate={{ y: [0, 6, 0] }}
                     transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
@@ -412,7 +423,6 @@ export default function LandingPage() {
           </div>
         </motion.div>
 
-        {/* Scroll indicator */}
         <motion.div
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 2, repeat: Infinity }}
@@ -472,9 +482,9 @@ export default function LandingPage() {
                   variants={scaleIn}
                   transition={{ duration: 0.5 }}
                   whileHover={{ y: -6, transition: { duration: 0.25 } }}
-                  className="group relative rounded-3xl p-7 border border-gray-100 bg-white hover:border-gray-200 hover:shadow-xl hover:shadow-gray-100/50 transition-all duration-300 overflow-hidden"
+                  onClick={() => setSubPage({ type: 'pack', packType: pack.slug as 'pratique' | 'emotion' | 'evenementiel' | 'immobilier' })}
+                  className="group relative rounded-3xl p-7 border border-gray-100 bg-white hover:border-gray-200 hover:shadow-xl hover:shadow-gray-100/50 transition-all duration-300 overflow-hidden cursor-pointer"
                 >
-                  {/* Top gradient line */}
                   <div className="absolute top-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                     style={{ background: pack.gradient }} />
 
@@ -486,7 +496,6 @@ export default function LandingPage() {
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{pack.name}</h3>
                   <p className="text-sm text-gray-500 leading-relaxed mb-5">{pack.desc}</p>
 
-                  {/* Examples tags */}
                   <div className="flex flex-wrap gap-1.5">
                     {pack.examples.map((ex) => (
                       <span key={ex} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
@@ -496,7 +505,6 @@ export default function LandingPage() {
                     ))}
                   </div>
 
-                  {/* Arrow on hover */}
                   <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                     <ArrowUpRight className="w-5 h-5" style={{ color: pack.color }} />
                   </div>
@@ -506,6 +514,11 @@ export default function LandingPage() {
           </motion.div>
         </div>
       </Section>
+
+      {/* ============================================================= */}
+      {/*  DEMO SECTION                                                  */}
+      {/* ============================================================= */}
+      <DemoSection onLogin={handleDemoAutoLogin} />
 
       {/* ============================================================= */}
       {/*  HOW IT WORKS                                                  */}
@@ -527,7 +540,6 @@ export default function LandingPage() {
           </motion.div>
 
           <motion.div variants={stagger} className="grid md:grid-cols-3 gap-8 relative">
-            {/* Connector line (desktop) */}
             <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-px bg-gradient-to-r from-purple-200 via-emerald-200 to-amber-200" />
 
             {STEPS.map((step, i) => {
@@ -582,7 +594,8 @@ export default function LandingPage() {
                   variants={fadeUp}
                   transition={{ duration: 0.4 }}
                   whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                  className="group flex gap-4 p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all duration-300"
+                  onClick={() => setSubPage({ type: 'page', pageId: 'fonctionnalites' })}
+                  className="group flex gap-4 p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all duration-300 cursor-pointer"
                 >
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
                     style={{ backgroundColor: `${feat.color}12`, color: feat.color }}>
@@ -608,10 +621,8 @@ export default function LandingPage() {
             className="rounded-3xl p-10 sm:p-14 relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #5B21B6 100%)' }}
           >
-            {/* Pattern overlay */}
             <div className="absolute inset-0 opacity-[0.06]"
               style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-            {/* Glow orbs */}
             <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-purple-400/20 blur-[80px]" />
             <div className="absolute -bottom-20 -left-20 w-40 h-40 rounded-full bg-amber-400/20 blur-[60px]" />
 
@@ -692,7 +703,6 @@ export default function LandingPage() {
             className="rounded-[2rem] p-10 sm:p-16 lg:p-20 text-center relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%)' }}
           >
-            {/* Background elements */}
             <div className="absolute inset-0 opacity-[0.04]"
               style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-purple-500/10 blur-[100px]" />
@@ -728,6 +738,13 @@ export default function LandingPage() {
                   Accéder à Qrioo
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
+                <button
+                  onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="group w-full sm:w-auto px-8 py-4 rounded-2xl font-bold text-white text-base border-2 border-white/20 hover:border-white/40 hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2.5"
+                >
+                  <Play className="w-4 h-4" />
+                  Voir la démo
+                </button>
               </motion.div>
             </div>
           </motion.div>
@@ -756,33 +773,28 @@ export default function LandingPage() {
             <div>
               <h4 className="font-bold text-gray-900 text-sm mb-4">Produit</h4>
               <ul className="space-y-2.5">
-                {['Fonctionnalités', 'Packs', 'Tarifs', 'API'].map((link) => (
-                  <li key={link}>
-                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
-                  </li>
-                ))}
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'fonctionnalites' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Fonctionnalités</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'tarifs' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Tarifs</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'api' })} className="text-sm text-gray-400 hover:text-purple-600 transition">API</button></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-bold text-gray-900 text-sm mb-4">Entreprise</h4>
               <ul className="space-y-2.5">
-                {['À propos', 'Blog', 'Carrières', 'Contact'].map((link) => (
-                  <li key={link}>
-                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
-                  </li>
-                ))}
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'apropos' })} className="text-sm text-gray-400 hover:text-purple-600 transition">À propos</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'blog' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Blog</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'carrieres' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Carrières</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'contact' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Contact</button></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-bold text-gray-900 text-sm mb-4">Légal</h4>
               <ul className="space-y-2.5">
-                {['Confidentialité', 'CGU', 'Mentions légales'].map((link) => (
-                  <li key={link}>
-                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
-                  </li>
-                ))}
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'confidentialite' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Confidentialité</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'cgu' })} className="text-sm text-gray-400 hover:text-purple-600 transition">CGU</button></li>
+                <li><button onClick={() => setSubPage({ type: 'page', pageId: 'mentions-legales' })} className="text-sm text-gray-400 hover:text-purple-600 transition">Mentions légales</button></li>
               </ul>
             </div>
           </div>
@@ -818,7 +830,6 @@ export default function LandingPage() {
               className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Top gradient bar */}
               <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #A855F7, #7C3AED, #F59E0B)' }} />
 
               <button
@@ -840,7 +851,7 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} data-login-form className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
                     <div className="relative">

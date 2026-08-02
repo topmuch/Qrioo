@@ -190,3 +190,101 @@ Stage Summary:
 - Manual reset available via header button
 - Rich demo data: agencies, users, batches, activated QR codes with realistic content, scan history
 - All existing pages verified working: Landing, Dashboard (with reset indicator), QR Codes (with detail panel), Scan pages (public immobilier, pending activation redirect)
+---
+Task ID: 5
+Agent: Main
+Task: Create SubPageLayout and PackDetailPage components for landing sub-pages
+
+Work Log:
+- Created /src/components/landing/SubPageLayout.tsx (255 lines, ~10KB) — reusable layout wrapper:
+  - Props: title, subtitle, badge, badgeColor, children, onBack
+  - Fixed top navbar with glassmorphism (blur 16px, white 82% opacity), gradient bottom border (purple→amber→emerald), Qrioo logo, back arrow button, Connexion button
+  - Hero section with badge pill, title (text-3xl→5xl font-black), subtitle, background accent orbs (color from badgeColor), dot grid pattern
+  - Content area with max-w-7xl mx-auto
+  - Sticky footer matching LandingPage (4-column grid: brand, Produit, Entreprise, Légal)
+  - Scroll to top on mount via useEffect
+  - framer-motion fadeUp + stagger animations on hero content
+- Created /src/components/landing/packs/PackDetailPage.tsx (604 lines, ~22KB) — detailed pack pages:
+  - Props: packType (pratique|emotion|evenementiel|immobilier), onBack, onCTA
+  - 4 complete pack data sets (PACKS record) with unique content:
+    - Pratique (amber): Valises & Bagages, Cartes de visite, Étiquettes voyage, Clés & Objets
+    - Émotion (purple): Messages personnalisés, Livre d'or digital, Témoignages clients, Souvenirs d'événements
+    - Événementiel (emerald): Mariages, Conférences, Festivals, Événements corporate
+    - Immobilier (slate): Panneaux de vente, Visites virtuelles, Fiches bien, Plaquettes agence
+  - Each pack has: 4 usage cards, 3 steps, 4 advantages, CTA section
+  - AnimatedSection wrapper with useInView for scroll-triggered fadeUp animations
+  - SectionTitle with gradient text using pack's gradient
+  - UsageCardItem: rounded-2xl, border-gray-100, hover:shadow-lg, gradient icon
+  - StepCardItem: vertical timeline with connector line, numbered gradient icon badges
+  - AdvantageCard: emoji icon with light gradient background, hover scale
+  - CTA section: dark gradient card (#1E1B4B→#0F172A), dot pattern, glow orb, pack-specific CTA text
+  - Uses SubPageLayout as wrapper, passes badge/badgeColor/title/subtitle/onBack
+  - CTA button calls onCTA prop
+- Fixed JSX comment syntax error (missing closing brace)
+- Cleaned unused imports (removed Home, Zap, Shield, Bell, Globe, Check, Star, Clock, Mail, ChevronRight)
+- Lint: 0 new errors (all 11 errors are pre-existing)
+- Dev server compiles successfully
+
+Stage Summary:
+- Created 2 files: SubPageLayout.tsx (255 lines) and packs/PackDetailPage.tsx (604 lines)
+- SubPageLayout: reusable glassmorphism sub-page wrapper with navbar, hero, content area, footer
+- PackDetailPage: 4 rich pack detail pages with usage cards, how-it-works steps, advantages, CTA
+- All text in French, responsive mobile-first, scroll animations via framer-motion
+- Clean lint, compiles successfully
+
+---
+Task ID: 6
+Agent: Main
+Task: Create FooterPages.tsx — all footer/sitemap pages for landing
+
+Work Log:
+- Created /src/components/landing/pages/FooterPages.tsx (1,091 lines, ~39KB)
+- Single component `FooterPages` with `pageId` + `onBack` props that routes to 10 sub-pages
+- Each page wrapped in SubPageLayout with appropriate badge, badgeColor, title
+- Created reusable AnimatedSection (useInView + stagger) and FadeUpItem (motion.div) animation wrappers
+- Implemented 10 complete pages:
+  1. **fonctionnalites** (amber): 8 feature blocks in 2-col grid with icons, hover animations
+  2. **tarifs** (emerald): 3 pricing cards (Starter/Pro/Entreprise), Pro highlighted with purple border + Popular badge
+  3. **api** (purple): 3 dark code blocks (POST batches, GET qrcodes, POST scan) + 5 API feature chips
+  4. **apropos** (purple): Mission paragraph, 3 values cards (Innovation/Simplicité/Sécurité), 4 team members with avatar initials
+  5. **blog** (emerald): 6 post cards in 3-col grid with gradient image placeholders, category tags, alert on click
+  6. **carrieres** (amber): Intro paragraph + 4 job listing cards with location/contract badges, tech tags, Postuler button
+  7. **contact** (emerald): 2-col layout with reactive form (useState) + 4 contact info cards (email/phone/address/hours)
+  8. **confidentialite** (purple): 6 sections of realistic French legal text (data collection, usage, cookies, third parties, retention, rights)
+  9. **cgu** (purple): 6 sections (service, accounts, QR codes, liability, modifications, applicable law)
+  10. **mentions-legales** (purple): 5 sections (publisher, host, director, IP, contact)
+- Used QRIOO color system throughout (purple/amber/emerald/slate)
+- All text in French, mobile-first responsive, framer-motion scroll animations
+- Legal pages use shared LegalPage component with clean max-w-4xl layout
+- Lint: 0 new errors (all pre-existing)
+
+Stage Summary:
+- Created 1 file: /src/components/landing/pages/FooterPages.tsx (1,091 lines, ~39KB)
+- 10 complete sub-pages rendered via single FooterPages component with pageId routing
+- Fallback 404 page for unknown pageIds
+- Clean lint, no new errors
+
+---
+Task ID: 1-5
+Agent: Main Orchestrator
+Task: Develop pack detail pages, all site pages, demo section on landing page, sub-page routing
+
+Work Log:
+- Created SubPageLayout.tsx (255 lines) — reusable layout with glassmorphism navbar, hero section, footer
+- Created PackDetailPage.tsx (604 lines) — 4 pack detail pages with cas d'usage, comment ca marche, avantages, CTA
+- Created FooterPages.tsx (1091 lines) — 10 footer pages (fonctionnalites, tarifs, api, apropos, blog, carrieres, contact, confidentialite, cgu, mentions-legales)
+- Created DemoSection.tsx (358 lines) — live demo section on landing page with real-time stats, countdown timer, demo account selector, auto-login
+- Refactored LandingPage.tsx (937 lines) — added SubPage type routing, sub-page navigation for all packs and footer links, demo section integration
+- All footer links now navigate to sub-pages via state-based routing
+- All pack cards are clickable and navigate to pack detail pages
+- Demo section fetches live data from /api/demo/reset endpoint with countdown timer
+- "Lancer la démo" auto-logs in as selected demo account
+- Fixed lint: removed unused eslint-disable directives, fixed setMounted pattern
+- Browser verified: all pages render, pack navigation works, footer pages work, demo auto-login works, mobile responsive
+
+Stage Summary:
+- 4 new components created (~2250 lines total)
+- LandingPage refactored with sub-page routing system (14 sub-pages)
+- Demo section fully functional with live data and auto-reset countdown
+- All pre-existing lint errors remain unchanged, 0 new lint errors introduced
+- Everything compiles and renders correctly
