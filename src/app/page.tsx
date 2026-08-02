@@ -2,46 +2,30 @@
 
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useAuthStore, type AppView } from '@/store/auth';
+import { useAuthStore } from '@/store/auth';
 import LandingPage from '@/components/landing/LandingPage';
 import AppSidebar from '@/components/layout/AppSidebar';
 import DashboardView from '@/components/dashboard/DashboardView';
 import AgencesView from '@/components/dashboard/AgencesView';
-import LotsView from '@/components/dashboard/LotsView';
-import TagsView from '@/components/dashboard/TagsView';
+import StudioView from '@/components/dashboard/StudioView';
+import QRCodesView from '@/components/dashboard/QRCodesView';
 import ScanPageView from '@/components/dashboard/ScanPageView';
 import { Loader2 } from 'lucide-react';
 
 export default function HomePage() {
-  const { isAuthenticated, isLoading, setLoading, setUser, setToken, token, user, currentView } = useAuthStore();
+  const { isAuthenticated, isLoading, setLoading, setUser, setToken, user, currentView } = useAuthStore();
 
-  // On mount, try to restore session
   useEffect(() => {
     const savedToken = localStorage.getItem('qrioo_token');
-    if (!savedToken) {
-      setLoading(false);
-      return;
-    }
+    if (!savedToken) { setLoading(false); return; }
     setToken(savedToken);
-
-    // Verify token with server
     fetch('/api/auth/me', { headers: { Authorization: `Bearer ${savedToken}` } })
       .then((r) => r.json())
-      .then((d) => {
-        if (d.success && d.user) {
-          setUser(d.user);
-          setToken(savedToken);
-        } else {
-          setToken(null);
-        }
-      })
-      .catch(() => {
-        setToken(null);
-      })
+      .then((d) => { if (d.success && d.user) { setUser(d.user); setToken(savedToken); } else { setToken(null); } })
+      .catch(() => { setToken(null); })
       .finally(() => setLoading(false));
   }, []);
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -53,20 +37,15 @@ export default function HomePage() {
     );
   }
 
-  // Not authenticated → Landing page with login modal
-  if (!isAuthenticated || !user) {
-    return <LandingPage />;
-  }
+  if (!isAuthenticated || !user) return <LandingPage />;
 
-  // Authenticated → App layout
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
+      case 'studio': return <StudioView />;
+      case 'qrcodes': return <QRCodesView />;
       case 'agences': return <AgencesView />;
-      case 'lots': return <LotsView />;
-      case 'tags': return <TagsView />;
       case 'scan': return <ScanPageView />;
-      case 'settings': return <DashboardView />;
       default: return <DashboardView />;
     }
   };
@@ -75,7 +54,6 @@ export default function HomePage() {
     <div className="h-screen flex bg-gray-50 overflow-hidden">
       <AppSidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
         <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white ${
@@ -90,18 +68,12 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-              user.role === 'SUPERADMIN'
-                ? 'bg-purple-100 text-purple-700'
-                : 'bg-amber-100 text-amber-700'
-            }`}>
-              {user.role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN AGENCE'}
-            </span>
-          </div>
+          <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+            user.role === 'SUPERADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
+          }`}>
+            {user.role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN AGENCE'}
+          </span>
         </header>
-
-        {/* Main content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentView}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type UserRole = 'SUPERADMIN' | 'ADMIN_AGENCE';
-export type AppView = 'dashboard' | 'agences' | 'lots' | 'tags' | 'scan' | 'settings';
+export type AppView = 'dashboard' | 'studio' | 'qrcodes' | 'agences' | 'scan' | 'settings';
 
 export interface AuthUser {
   id: string;

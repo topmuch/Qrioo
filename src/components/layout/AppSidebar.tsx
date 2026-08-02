@@ -2,8 +2,8 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  QrCode, LayoutDashboard, Building2, Layers, ScanLine, Settings,
-  LogOut, ChevronLeft, ChevronRight, Shield, Users,
+  QrCode, LayoutDashboard, Building2, Wand2, ScanLine,
+  LogOut, ChevronLeft, ChevronRight, Shield, Users, Grid3X3,
 } from 'lucide-react';
 import { useAuthStore, type AppView } from '@/store/auth';
 
@@ -14,13 +14,14 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   superadminOnly?: boolean;
+  badge?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+  { id: 'studio', label: 'Studio', icon: <Wand2 className="w-5 h-5" />, badge: 'Nouveau' },
+  { id: 'qrcodes', label: 'Mes QR Codes', icon: <Grid3X3 className="w-5 h-5" /> },
   { id: 'agences', label: 'Agences', icon: <Building2 className="w-5 h-5" />, superadminOnly: true },
-  { id: 'lots', label: 'Lots QR', icon: <Layers className="w-5 h-5" /> },
-  { id: 'tags', label: 'Mes Tags', icon: <QrCode className="w-5 h-5" /> },
   { id: 'scan', label: 'Page Scan', icon: <ScanLine className="w-5 h-5" /> },
 ];
 
@@ -81,7 +82,7 @@ export default function AppSidebar() {
               key={item.id}
               type="button"
               onClick={() => setView(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all min-h-[44px] ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all min-h-[44px] relative ${
                 isActive
                   ? 'bg-white/10 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -94,45 +95,42 @@ export default function AppSidebar() {
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: 'auto' }}
                     exit={{ opacity: 0, width: 0 }}
-                    className="overflow-hidden whitespace-nowrap"
+                    className="overflow-hidden whitespace-nowrap flex-1 text-left"
                   >
                     {item.label}
                   </motion.span>
                 )}
               </AnimatePresence>
+              {isActive && sidebarOpen && item.badge && (
+                <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                  className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300">
+                  {item.badge}
+                </motion.span>
+              )}
+              {isActive && (
+                <motion.div layoutId="sidebar-active"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+                  style={{ backgroundColor: QRIOO_PURPLE }} />
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Bottom: collapse + logout */}
+      {/* Bottom */}
       <div className="px-3 py-4 border-t border-gray-800 space-y-1">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/5 transition min-h-[44px]"
-        >
+        <button type="button" onClick={toggleSidebar}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/5 transition min-h-[44px]">
           {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           <AnimatePresence>
-            {sidebarOpen && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
-                Réduire
-              </motion.span>
-            )}
+            {sidebarOpen && <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">Réduire</motion.span>}
           </AnimatePresence>
         </button>
-        <button
-          type="button"
-          onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition min-h-[44px]"
-        >
+        <button type="button" onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition min-h-[44px]">
           <LogOut className="w-5 h-5 flex-shrink-0" />
           <AnimatePresence>
-            {sidebarOpen && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
-                Déconnexion
-              </motion.span>
-            )}
+            {sidebarOpen && <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">Déconnexion</motion.span>}
           </AnimatePresence>
         </button>
       </div>
