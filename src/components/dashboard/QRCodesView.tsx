@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Eye, QrCode, Package, Heart, Calendar, Building2,
+  X, Clock, MapPin, User, Copy, Download,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
@@ -24,6 +25,12 @@ const STATUS_COLORS: Record<string, string> = {
   in_stock: '#F59E0B',
   activated: '#10B981',
   scanned: '#3B82F6',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  in_stock: 'En stock',
+  activated: 'Activé',
+  scanned: 'Scanné',
 };
 
 /* ─── Status filter options ────────────────────────────────────── */
@@ -50,6 +57,33 @@ interface QRCodeItem {
   batchId: string | null;
 }
 
+interface ScanLogItem {
+  id: string;
+  location: string | null;
+  message: string | null;
+  finderName: string | null;
+  finderPhone: string | null;
+  createdAt: string;
+  context: string | null;
+}
+
+interface QRDetail {
+  id: string;
+  reference: string;
+  status: string;
+  packType: string;
+  scanCount: number;
+  createdAt: string;
+  lastScanDate: string | null;
+  lastScanLocation: string | null;
+  expiresAt: string | null;
+  contentType: string | null;
+  contentUrl: string | null;
+  contentMetadata: string | null;
+  batchName: string | null;
+  scanLogs: ScanLogItem[];
+}
+
 /* ─── Component ─────────────────────────────────────────────────── */
 
 export default function QRCodesView() {
@@ -60,6 +94,11 @@ export default function QRCodesView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [packFilter, setPackFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  /* ── Detail panel state ──────────────────────────────────── */
+  const [selectedQR, setSelectedQR] = useState<string | null>(null);
+  const [detail, setDetail] = useState<QRDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchQRCodes = useCallback(async () => {
     setLoading(true);
@@ -84,6 +123,45 @@ export default function QRCodesView() {
     setLoading(false);
   }, [token, statusFilter, packFilter, searchQuery]);
 
+  /* ── Fetch detail for a QR code ───────────────────────────── */
+  const fetchDetail = useCallback(async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/qrcodes/${id}`);
+      const data = await res.json();
+      if (data.baggage) {
+        const b = data.baggage;
+        setDetail({
+          id: b.id,
+          reference: b.reference,
+          status: b.status,
+          packType: b.packType,
+          scanCount: b.scanCount,
+          createdAt: b.createdAt,
+          lastScanDate: b.lastScanDate,
+          lastScanLocation: b.lastScanLocation,
+          expiresAt: b.expiresAt,
+          contentType: b.contentType,
+          contentUrl: b.contentUrl,
+          contentMetadata: b.contentMetadata,
+          batchName: b.batch?.name ?? null,
+          scanLogs: (b.scanLogs ?? []).map((s: Record<string, unknown>) => ({
+            id: s.id,
+            location: s.location ?? null,
+            message: s.message ?? null,
+            finderName: s.finderName ?? null,
+            finderPhone: s.finderPhone ?? null,
+            createdAt: s.createdAt,
+            context: s.context ?? null,
+          })),
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    setDetailLoading(false);
+  }, []);
+
   useEffect(() => {
     fetchQRCodes();
   }, [fetchQRCodes]);
@@ -100,6 +178,52 @@ export default function QRCodesView() {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
+  const formatDateTime = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  const handleCardClick = (id: string) => {
+    setSelectedQR(id);
+    setDetail(null);
+    fetchDetail(id);
+  };
+
+  const closePanel = () => {
+    setSelectedQR(null);
+    setDetail(null);
+  };
+
+  const copyReference = async () => {
+    if (!detail) return;
+    try {
+      await navigator.clipboard.writeText(detail.reference);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const downloadQR = () => {
+    if (!detail) return;
+    const link = document.createElement('a');
+    link.href = `/api/qr/${detail.reference}?size=400`;
+    link.download = `qrioo-${detail.reference}.png`;
+    link.click();
+  };
+
+  const parseContentMetadata = (raw: string | null): Record<string, unknown> | null => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
   /* ─── Stat pill counts from current dataset ─────────────────── */
 
   const statInStock = qrcodes.filter((qr) => qr.status === 'in_stock').length;
@@ -107,7 +231,7 @@ export default function QRCodesView() {
   const statScanned = qrcodes.filter((qr) => qr.scanCount > 0).length;
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto">
+    <div className="flex-1 p-6 overflow-y-auto relative">
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-gray-900">Mes QR Codes</h1>
@@ -223,7 +347,10 @@ export default function QRCodesView() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
                   whileHover={{ scale: 1.03, boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}
-                  className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col items-center cursor-pointer relative"
+                  onClick={() => handleCardClick(qr.id)}
+                  className={`bg-white rounded-2xl border p-4 flex flex-col items-center cursor-pointer relative transition-colors ${
+                    selectedQR === qr.id ? 'border-purple-400 ring-2 ring-purple-100' : 'border-gray-200'
+                  }`}
                 >
                   {/* Top colored bar */}
                   <div
@@ -285,6 +412,284 @@ export default function QRCodesView() {
           </motion.div>
         </AnimatePresence>
       )}
+
+      {/* ════════════════════════════════════════════════════════════
+          Detail Panel — Slide from right
+      ════════════════════════════════════════════════════════════ */}
+
+      <AnimatePresence>
+        {selectedQR && (
+          <>
+            {/* ── Overlay ──────────────────────────────────────── */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/30 z-40"
+              onClick={closePanel}
+            />
+
+            {/* ── Panel ────────────────────────────────────────── */}
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="fixed top-0 right-0 bottom-0 w-full sm:w-[400px] bg-white z-50 shadow-2xl flex flex-col"
+            >
+              {/* Panel header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-100">
+                <h2 className="text-sm font-bold text-gray-900">Détails du QR Code</h2>
+                <button
+                  onClick={closePanel}
+                  className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Panel body — scrollable */}
+              <div className="flex-1 overflow-y-auto">
+                {detailLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-gray-400 mt-3">Chargement...</p>
+                  </div>
+                ) : detail ? (
+                  <div className="p-4 space-y-5">
+                    {/* ── QR Code image ─────────────────────────── */}
+                    <div className="flex justify-center">
+                      <img
+                        src={`/api/qr/${detail.reference}?size=200`}
+                        alt={detail.reference}
+                        className="w-40 h-40 rounded-xl border border-gray-100 shadow-sm"
+                      />
+                    </div>
+
+                    {/* ── Reference ─────────────────────────────── */}
+                    <div className="text-center">
+                      <p className="font-mono text-sm font-bold text-gray-900">
+                        {detail.reference}
+                      </p>
+                    </div>
+
+                    {/* ── Status + Pack badges ──────────────────── */}
+                    <div className="flex items-center justify-center gap-2">
+                      <span
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{
+                          backgroundColor: getStatusColor(detail.status) + '18',
+                          color: getStatusColor(detail.status),
+                        }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getStatusColor(detail.status) }} />
+                        {STATUS_LABELS[detail.status] ?? detail.status}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{
+                          backgroundColor: getPackColor(detail.packType) + '18',
+                          color: getPackColor(detail.packType),
+                        }}
+                      >
+                        {getPackInfo(detail.packType).icon}
+                        {getPackInfo(detail.packType).title}
+                      </span>
+                    </div>
+
+                    {/* ── Info grid ─────────────────────────────── */}
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-2.5">
+                      {/* Batch */}
+                      {detail.batchName && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-400">Lot</span>
+                          <span className="font-semibold text-gray-700">{detail.batchName}</span>
+                        </div>
+                      )}
+
+                      {/* Created */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <Calendar className="w-3 h-3" />
+                          Créé le
+                        </span>
+                        <span className="font-semibold text-gray-700">
+                          {formatDateTime(detail.createdAt)}
+                        </span>
+                      </div>
+
+                      {/* Scan count */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <Eye className="w-3 h-3" />
+                          Scans
+                        </span>
+                        <span className="font-semibold text-gray-700">{detail.scanCount}</span>
+                      </div>
+
+                      {/* Last scan date */}
+                      {detail.lastScanDate && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1 text-gray-400">
+                            <Clock className="w-3 h-3" />
+                            Dernier scan
+                          </span>
+                          <span className="font-semibold text-gray-700">
+                            {formatDateTime(detail.lastScanDate)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Last scan location */}
+                      {detail.lastScanLocation && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1 text-gray-400">
+                            <MapPin className="w-3 h-3" />
+                            Lieu
+                          </span>
+                          <span className="font-semibold text-gray-700 text-right max-w-[180px] truncate">
+                            {detail.lastScanLocation}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Content metadata (if activated) ───────── */}
+                    {detail.status === 'activated' && (
+                      <div className="bg-purple-50/60 rounded-xl p-3 space-y-2">
+                        <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">
+                          Contenu associé
+                        </p>
+                        <ContentMetadataSummary metadata={detail.contentMetadata} />
+                      </div>
+                    )}
+
+                    {/* ── Action buttons ────────────────────────── */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={copyReference}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copier
+                      </button>
+                      <button
+                        onClick={downloadQR}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl transition"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Télécharger
+                      </button>
+                    </div>
+
+                    {/* ── Scan history timeline ─────────────────── */}
+                    <div>
+                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        Historique des scans
+                        {detail.scanLogs.length > 0 && (
+                          <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                            {detail.scanLogs.length}
+                          </span>
+                        )}
+                      </h3>
+
+                      {detail.scanLogs.length === 0 ? (
+                        <div className="text-center py-8 text-gray-300">
+                          <Eye className="w-6 h-6 mx-auto mb-2" />
+                          <p className="text-xs">Aucun scan enregistré</p>
+                        </div>
+                      ) : (
+                        <div className="relative pl-5 space-y-0">
+                          {/* Vertical timeline line */}
+                          <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200" />
+
+                          {detail.scanLogs.map((scan) => (
+                            <div key={scan.id} className="relative pb-4 last:pb-0">
+                              {/* Timeline dot */}
+                              <div className="absolute left-[-14px] top-1.5 w-[15px] h-[15px] rounded-full bg-white border-2 border-purple-400 flex items-center justify-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                              </div>
+
+                              {/* Content */}
+                              <div className="bg-gray-50 rounded-lg p-2.5">
+                                <p className="text-[11px] font-semibold text-gray-800">
+                                  {formatDateTime(scan.createdAt)}
+                                </p>
+
+                                <div className="mt-1.5 space-y-1">
+                                  {scan.finderName && (
+                                    <p className="flex items-center gap-1 text-[11px] text-gray-600">
+                                      <User className="w-3 h-3 text-gray-400" />
+                                      {scan.finderName}
+                                    </p>
+                                  )}
+                                  {scan.location && (
+                                    <p className="flex items-center gap-1 text-[11px] text-gray-600">
+                                      <MapPin className="w-3 h-3 text-gray-400" />
+                                      {scan.location}
+                                    </p>
+                                  )}
+                                  {scan.message && (
+                                    <p className="text-[11px] text-gray-500 italic mt-1 pl-4 border-l-2 border-purple-200">
+                                      &ldquo;{scan.message}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ─── Content Metadata Summary Sub-component ────────────────────── */
+
+function ContentMetadataSummary({ metadata }: { metadata: string | null }) {
+  const parsed = (() => {
+    if (!metadata) return null;
+    try {
+      return JSON.parse(metadata) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!parsed) {
+    return <p className="text-[11px] text-gray-500">Aucune métadonnée disponible</p>;
+  }
+
+  const entries = Object.entries(parsed).filter(
+    ([key]) => !['id', 'createdAt', 'updatedAt'].includes(key),
+  );
+
+  if (entries.length === 0) {
+    return <p className="text-[11px] text-gray-500">Aucune métadonnée disponible</p>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {entries.map(([key, value]) => (
+        <div key={key} className="flex items-start justify-between gap-2 text-[11px]">
+          <span className="text-purple-400 font-medium capitalize shrink-0">
+            {key.replace(/([A-Z])/g, ' $1').trim()}
+          </span>
+          <span className="text-gray-700 text-right font-semibold truncate">
+            {typeof value === 'boolean' ? (value ? 'Oui' : 'Non') : String(value)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

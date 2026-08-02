@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth';
 import LandingPage from '@/components/landing/LandingPage';
@@ -10,10 +10,36 @@ import AgencesView from '@/components/dashboard/AgencesView';
 import StudioView from '@/components/dashboard/StudioView';
 import QRCodesView from '@/components/dashboard/QRCodesView';
 import ScanPageView from '@/components/dashboard/ScanPageView';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw, Clock } from 'lucide-react';
 
 export default function HomePage() {
   const { isAuthenticated, isLoading, setLoading, setUser, setToken, user, currentView } = useAuthStore();
+  const [demoInfo, setDemoInfo] = useState<{ minutesUntilNextReset: number } | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const fetchDemoStatus = useCallback(() => {
+    fetch('/api/demo/reset')
+      .then((r) => r.json())
+      .then((d) => { if (d.mode === 'demo') setDemoInfo(d); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchDemoStatus();
+    const interval = setInterval(fetchDemoStatus, 60000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, fetchDemoStatus]);
+
+  const handleReset = async () => {
+    if (!confirm('Réinitialiser la démo ? Toutes les données seront remplacées.')) return;
+    setIsResetting(true);
+    try {
+      await fetch('/api/demo/reset', { method: 'POST' });
+      fetchDemoStatus();
+    } catch {}
+    setIsResetting(false);
+  };
 
   useEffect(() => {
     const savedToken = localStorage.getItem('qrioo_token');
@@ -68,11 +94,26 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-            user.role === 'SUPERADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
-          }`}>
-            {user.role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN AGENCE'}
-          </span>
+          <div className="flex items-center gap-3">
+            {demoInfo && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={isResetting}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition text-[11px] text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                title="Réinitialiser la démo"
+              >
+                {isResetting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                <Clock className="w-3 h-3" />
+                <span>Reset dans {demoInfo.minutesUntilNextReset}min</span>
+              </button>
+            )}
+            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+              user.role === 'SUPERADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              {user.role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN AGENCE'}
+            </span>
+          </div>
         </header>
         <AnimatePresence mode="wait">
           <motion.div
