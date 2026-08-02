@@ -1,0 +1,685 @@
+     1→'use client';
+     2→
+     3→import { useState, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Package,
+     7→  Heart,
+     8→  Calendar,
+     9→  Building2,
+    10→  ArrowLeft,
+    11→  ArrowRight,
+    12→  Download,
+    13→  Copy,
+    14→  FileText,
+    15→  FileSpreadsheet,
+    16→  Loader2,
+    17→  Sparkles,
+    18→  Check,
+    19→} from 'lucide-react';
+    20→import { useAuthStore } from '@/store/auth';
+    21→
+    22→/* ------------------------------------------------------------------ */
+    23→/*  Pack definitions                                                  */
+    24→/* ------------------------------------------------------------------ */
+    25→
+    26→type PackType = 'pratique' | 'emotion' | 'evenementiel' | 'immobilier';
+    27→
+    28→interface PackDefinition {
+    29→  key: PackType;
+    30→  label: string;
+    31→  description: string;
+    32→  icon: typeof Package;
+    33→  color: string;
+    34→  gradient: string;
+    35→}
+    36→
+    37→const PACKS: PackDefinition[] = [
+    38→  {
+    39→    key: 'pratique',
+    40→    label: 'Pratique',
+    41→    description: 'Objets perdus, étiquettes utilitaires',
+    42→    icon: Package,
+    43→    color: '#D97706',
+    44→    gradient: 'linear-gradient(135deg,#F59E0B,#D97706)',
+    45→  },
+    46→  {
+    47→    key: 'emotion',
+    48→    label: 'Emotion',
+    49→    description: 'Messages personnalisés, moments uniques',
+    50→    icon: Heart,
+    51→    color: '#7C3AED',
+    52→    gradient: 'linear-gradient(135deg,#A855F7,#7C3AED)',
+    53→  },
+    54→  {
+    55→    key: 'evenementiel',
+    56→    label: 'Événementiel',
+    57→    description: 'Événements, billetterie, accueils',
+    58→    icon: Calendar,
+    59→    color: '#059669',
+    60→    gradient: 'linear-gradient(135deg,#10B981,#059669)',
+    61→  },
+    62→  {
+    63→    key: 'immobilier',
+    64→    label: 'Immobilier',
+    65→    description: 'Panneaux, visites virtuelles, biens',
+    66→    icon: Building2,
+    67→    color: '#475569',
+    68→    gradient: 'linear-gradient(135deg,#64748B,#475569)',
+    69→  },
+    70→];
+    71→
+    72→const QUANTITIES = [4, 8, 16, 32] as const;
+    73→
+    74→const STEP_LABELS = ['Choisir le pack', 'Configurer', 'Résultat'] as const;
+    75→
+    76→/* ------------------------------------------------------------------ */
+    77→/*  Animation variants                                                */
+    78→/* ------------------------------------------------------------------ */
+    79→
+    80→const slideVariants = {
+    81→  enter: (direction: number) => ({
+    82→    x: direction > 0 ? 80 : -80,
+    83→    opacity: 0,
+    84→  }),
+    85→  center: {
+    86→    x: 0,
+    87→    opacity: 1,
+    88→  },
+    89→  exit: (direction: number) => ({
+    90→    x: direction > 0 ? -80 : 80,
+    91→    opacity: 0,
+    92→  }),
+    93→};
+    94→
+    95→const cardHover = {
+    96→  y: -6,
+    97→  boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
+    98→};
+    99→
+   100→/* ------------------------------------------------------------------ */
+   101→/*  Component                                                         */
+   102→/* ------------------------------------------------------------------ */
+   103→
+   104→interface BatchResult {
+   105→  id: string;
+   106→  references: string[];
+   107→}
+   108→
+   109→export default function StudioView() {
+   110→  const token = useAuthStore((s) => s.token);
+   111→
+   112→  const [step, setStep] = useState(0);
+   113→  const [direction, setDirection] = useState(0);
+   114→  const [selectedPack, setSelectedPack] = useState<PackType | null>(null);
+   115→  const [batchName, setBatchName] = useState('');
+   116→  const [quantity, setQuantity] = useState<number>(4);
+   117→  const [loading, setLoading] = useState(false);
+   118→  const [error, setError] = useState<string | null>(null);
+   119→  const [batch, setBatch] = useState<BatchResult | null>(null);
+   120→  const [copiedRef, setCopiedRef] = useState<string | null>(null);
+   121→
+   122→  const packDef = PACKS.find((p) => p.key === selectedPack) ?? null;
+   123→
+   124→  /* ---- navigation helpers ---- */
+   125→
+   126→  const goNext = useCallback(() => {
+   127→    if (step === 0 && !selectedPack) return;
+   128→    if (step === 1) {
+   129→      generateBatch();
+   130→      return;
+   131→    }
+   132→    setDirection(1);
+   133→    setStep((s) => Math.min(s + 1, 2));
+   134→  }, [step, selectedPack]);
+   135→
+   136→  const goBack = useCallback(() => {
+   137→    if (step === 0) return;
+   138→    setDirection(-1);
+   139→    setStep((s) => s - 1);
+   140→    if (step === 2) {
+   141→      setBatch(null);
+   142→      setError(null);
+   143→    }
+   144→  }, [step]);
+   145→
+   146→  /* ---- generate batch ---- */
+   147→
+   148→  const generateBatch = useCallback(async () => {
+   149→    if (!token || !selectedPack) return;
+   150→    setLoading(true);
+   151→    setError(null);
+   152→
+   153→    try {
+   154→      const res = await fetch('/api/batches', {
+   155→        method: 'POST',
+   156→        headers: {
+   157→          'Content-Type': 'application/json',
+   158→          Authorization: `Bearer ${token}`,
+   159→        },
+   160→        body: JSON.stringify({
+   161→          name: batchName || `Batch ${selectedPack}`,
+   162→          packType: selectedPack,
+   163→          quantity,
+   164→        }),
+   165→      });
+   166→
+   167→      const data = await res.json();
+   168→
+   169→      if (!data.success || !data.batch) {
+   170→        throw new Error(data.error || 'Erreur lors de la génération');
+   171→      }
+   172→
+   173→      setBatch({ id: data.batch.id, references: data.batch.references as string[] });
+   174→      setDirection(1);
+   175→      setStep(2);
+   176→    } catch (err: unknown) {
+   177→      const message = err instanceof Error ? err.message : 'Erreur inconnue';
+   178→      setError(message);
+   179→    } finally {
+   180→      setLoading(false);
+   181→    }
+   182→  }, [token, selectedPack, batchName, quantity]);
+   183→
+   184→  /* ---- clipboard ---- */
+   185→
+   186→  const copyReference = useCallback(async (ref: string) => {
+   187→    try {
+   188→      await navigator.clipboard.writeText(ref);
+   189→      setCopiedRef(ref);
+   190→      setTimeout(() => setCopiedRef(null), 1500);
+   191→    } catch {
+   192→      /* clipboard may be unavailable */
+   193→    }
+   194→  }, []);
+   195→
+   196→  /* ---- download single QR ---- */
+   197→
+   198→  const downloadQR = useCallback((ref: string) => {
+   199→    const link = document.createElement('a');
+   200→    link.href = `/api/qr/${ref}?size=200`;
+   201→    link.download = `${ref}.png`;
+   202→    link.click();
+   203→  }, []);
+   204→
+   205→  /* ---- export CSV ---- */
+   206→
+   207→  const exportCSV = useCallback(() => {
+   208→    if (!batch) return;
+   209→    const rows = ['Référence,Statut'];
+   210→    for (const ref of batch.references) {
+   211→      rows.push(`${ref},En stock`);
+   212→    }
+   213→    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+   214→    const url = URL.createObjectURL(blob);
+   215→    const link = document.createElement('a');
+   216→    link.href = url;
+   217→    link.download = `${batchName || 'batch'}_${batch.id}.csv`;
+   218→    link.click();
+   219→    URL.revokeObjectURL(url);
+   220→  }, [batch, batchName]);
+   221→
+   222→  /* ---- export PDF (batch zip or single page) ---- */
+   223→
+   224→  const exportPDF = useCallback(() => {
+   225→    if (!batch) return;
+   226→    /* Open a print-friendly view with all QR codes */
+   227→    const printWindow = window.open('', '_blank');
+   228→    if (!printWindow) return;
+   229→
+   230→    const cards = batch.references
+   231→      .map(
+   232→        (ref) => `
+   233→        <div style="text-align:center;width:140px;margin:8px auto;page-break-inside:avoid;">
+   234→          <div style="height:4px;background:${packDef?.color ?? '#7C3AED'};border-radius:4px 4px 0 0;"></div>
+   235→          <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:10px;">
+   236→            <img src="/api/qr/${ref}?size=200" width="120" height="120" style="image-rendering:pixelated;"/>
+   237→            <p style="font-family:monospace;font-size:11px;margin:6px 0 2px;color:#334155;">${ref}</p>
+   238→            <span style="font-size:10px;background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:999px;">En stock</span>
+   239→          </div>
+   240→        </div>`
+   241→      )
+   242→      .join('');
+   243→
+   244→    printWindow.document.write(`
+   245→      <!DOCTYPE html><html><head><title>Qrioo - ${batchName || 'Batch'}</title>
+   246→      <style>body{font-family:sans-serif;margin:20px;display:flex;flex-wrap:wrap;justify-content:center;gap:0;}
+   247→      @media print{body{margin:0;}}</style></head>
+   248→      <body>${cards}</body></html>
+   249→    `);
+   250→    printWindow.document.close();
+   251→    printWindow.print();
+   252→  }, [batch, batchName, packDef]);
+   253→
+   254→  /* ================================================================ */
+   255→  /*  RENDER                                                           */
+   256→  /* ================================================================ */
+   257→
+   258→  return (
+   259→    <div className="flex flex-1 flex-col overflow-hidden">
+   260→      {/* ---- Header ---- */}
+   261→      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-4">
+   262→        <Sparkles className="h-5 w-5 text-purple-600" />
+   263→        <h1 className="text-lg font-semibold text-slate-900">Studio de Création</h1>
+   264→      </div>
+   265→
+   266→      {/* ---- Step Indicator ---- */}
+   267→      <div className="flex items-center justify-center gap-2 border-b border-slate-100 bg-slate-50 px-6 py-4">
+   268→        {STEP_LABELS.map((label, idx) => {
+   269→          const isActive = step === idx;
+   270→          const isDone = step > idx;
+   271→          return (
+   272→            <div key={label} className="flex items-center gap-2">
+   273→              <div className="flex items-center gap-2">
+   274→                <div
+   275→                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-all duration-300 ${
+   276→                    isActive
+   277→                      ? 'bg-purple-600 text-white shadow-md shadow-purple-200'
+   278→                      : isDone
+   279→                        ? 'bg-purple-100 text-purple-700'
+   280→                        : 'bg-slate-200 text-slate-500'
+   281→                  }`}
+   282→                >
+   283→                  {isDone ? <Check className="h-4 w-4" /> : idx + 1}
+   284→                </div>
+   285→                <span
+   286→                  className={`text-sm font-medium transition-colors duration-300 ${
+   287→                    isActive ? 'text-purple-700' : 'text-slate-500'
+   288→                  }`}
+   289→                >
+   290→                  {label}
+   291→                </span>
+   292→              </div>
+   293→              {idx < 2 && (
+   294→                <div
+   295→                  className={`mx-2 h-0.5 w-8 rounded transition-colors duration-300 ${
+   296→                    step > idx ? 'bg-purple-400' : 'bg-slate-200'
+   297→                  }`}
+   298→                />
+   299→              )}
+   300→            </div>
+   301→          );
+   302→        })}
+   303→      </div>
+   304→
+   305→      {/* ---- Content ---- */}
+   306→      <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-8">
+   307→        <AnimatePresence mode="wait" custom={direction}>
+   308→          {/* ============ STEP 0: Choose Pack ============ */}
+   309→          {step === 0 && (
+   310→            <motion.div
+   311→              key="step0"
+   312→              custom={direction}
+   313→              variants={slideVariants}
+   314→              initial="enter"
+   315→              animate="center"
+   316→              exit="exit"
+   317→              transition={{ duration: 0.35, ease: 'easeInOut' }}
+   318→            >
+   319→              <h2 className="mb-1 text-2xl font-bold text-slate-900">
+   320→                Choisissez votre pack
+   321→              </h2>
+   322→              <p className="mb-8 text-slate-500">
+   323→                Sélectionnez le type de QR codes que vous souhaitez créer.
+   324→              </p>
+   325→
+   326→              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+   327→                {PACKS.map((pack) => {
+   328→                  const Icon = pack.icon;
+   329→                  const isSelected = selectedPack === pack.key;
+   330→                  return (
+   331→                    <motion.button
+   332→                      key={pack.key}
+   333→                      type="button"
+   334→                      onClick={() => setSelectedPack(pack.key)}
+   335→                      whileHover={cardHover}
+   336→                      whileTap={{ scale: 0.97 }}
+   337→                      className={`group relative flex flex-col items-start overflow-hidden rounded-2xl p-6 text-left transition-all duration-300 ${
+   338→                        isSelected
+   339→                          ? 'ring-2 ring-purple-500 shadow-lg shadow-purple-100'
+   340→                          : 'ring-1 ring-slate-200 hover:ring-slate-300'
+   341→                      }`}
+   342→                    >
+   343→                      {/* gradient background */}
+   344→                      <div
+   345→                        className="absolute inset-0 opacity-90"
+   346→                        style={{ background: pack.gradient }}
+   347→                      />
+   348→                      {/* overlay for text contrast */}
+   349→                      <div className="absolute inset-0 bg-black/10" />
+   350→
+   351→                      {/* selected glow */}
+   352→                      {isSelected && (
+   353→                        <motion.div
+   354→                          layoutId="packGlow"
+   355→                          className="absolute -inset-0.5 rounded-2xl bg-purple-400/20 blur-md"
+   356→                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+   357→                        />
+   358→                      )}
+   359→
+   360→                      <div className="relative z-10 flex flex-col items-start gap-4">
+   361→                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+   362→                          <Icon className="h-6 w-6 text-white" />
+   363→                        </div>
+   364→                        <div>
+   365→                          <h3 className="text-lg font-bold text-white">
+   366→                            {pack.label}
+   367→                          </h3>
+   368→                          <p className="mt-1 text-sm leading-relaxed text-white/80">
+   369→                            {pack.description}
+   370→                          </p>
+   371→                        </div>
+   372→
+   373→                        {isSelected && (
+   374→                          <motion.div
+   375→                            initial={{ scale: 0 }}
+   376→                            animate={{ scale: 1 }}
+   377→                            className="flex h-6 w-6 items-center justify-center rounded-full bg-white"
+   378→                          >
+   379→                            <Check className="h-4 w-4 text-purple-600" />
+   380→                          </motion.div>
+   381→                        )}
+   382→                      </div>
+   383→                    </motion.button>
+   384→                  );
+   385→                })}
+   386→              </div>
+   387→            </motion.div>
+   388→          )}
+   389→
+   390→          {/* ============ STEP 1: Configure ============ */}
+   391→          {step === 1 && packDef && (
+   392→            <motion.div
+   393→              key="step1"
+   394→              custom={direction}
+   395→              variants={slideVariants}
+   396→              initial="enter"
+   397→              animate="center"
+   398→              exit="exit"
+   399→              transition={{ duration: 0.35, ease: 'easeInOut' }}
+   400→            >
+   401→              <h2 className="mb-1 text-2xl font-bold text-slate-900">
+   402→                Configurez votre lot
+   403→              </h2>
+   404→              <p className="mb-8 text-slate-500">
+   405→                Personnalisez le nom et la quantité de QR codes à générer.
+   406→              </p>
+   407→
+   408→              <div className="mx-auto grid max-w-3xl grid-cols-1 gap-8 lg:grid-cols-5">
+   409→                {/* ---- Form Column ---- */}
+   410→                <div className="lg:col-span-3 space-y-6">
+   411→                  {/* Batch name */}
+   412→                  <div>
+   413→                    <label className="mb-2 block text-sm font-medium text-slate-700">
+   414→                      Nom du lot
+   415→                    </label>
+   416→                    <input
+   417→                      type="text"
+   418→                      value={batchName}
+   419→                      onChange={(e) => setBatchName(e.target.value)}
+   420→                      placeholder="Ex: Étiquettes bureau"
+   421→                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+   422→                    />
+   423→                  </div>
+   424→
+   425→                  {/* Quantity selector */}
+   426→                  <div>
+   427→                    <label className="mb-2 block text-sm font-medium text-slate-700">
+   428→                      Quantité
+   429→                    </label>
+   430→                    <div className="flex gap-3">
+   431→                      {QUANTITIES.map((q) => {
+   432→                        const isActive = quantity === q;
+   433→                        return (
+   434→                          <button
+   435→                            key={q}
+   436→                            type="button"
+   437→                            onClick={() => setQuantity(q)}
+   438→                            className={`flex h-12 w-16 items-center justify-center rounded-xl text-sm font-bold transition-all duration-200 ${
+   439→                              isActive
+   440→                                ? 'text-white shadow-md'
+   441→                                : 'border border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+   442→                            }`}
+   443→                            style={
+   444→                              isActive
+   445→                                ? { background: packDef.gradient }
+   446→                                : undefined
+   447→                            }
+   448→                          >
+   449→                            {q}
+   450→                          </button>
+   451→                        );
+   452→                      })}
+   453→                    </div>
+   454→                  </div>
+   455→
+   456→                  {/* Error */}
+   457→                  {error && (
+   458→                    <motion.p
+   459→                      initial={{ opacity: 0, y: -4 }}
+   460→                      animate={{ opacity: 1, y: 0 }}
+   461→                      className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600"
+   462→                    >
+   463→                      {error}
+   464→                    </motion.p>
+   465→                  )}
+   466→                </div>
+   467→
+   468→                {/* ---- Summary Column ---- */}
+   469→                <div className="lg:col-span-2">
+   470→                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+   471→                    <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+   472→                      Résumé
+   473→                    </h3>
+   474→
+   475→                    <div className="mb-4 flex items-center gap-3">
+   476→                      <div
+   477→                        className="flex h-10 w-10 items-center justify-center rounded-lg"
+   478→                        style={{ background: packDef.gradient }}
+   479→                      >
+   480→                        <packDef.icon className="h-5 w-5 text-white" />
+   481→                      </div>
+   482→                      <div>
+   483→                        <p className="font-semibold text-slate-900">
+   484→                          {packDef.label}
+   485→                        </p>
+   486→                        <p className="text-xs text-slate-500">Pack sélectionné</p>
+   487→                      </div>
+   488→                    </div>
+   489→
+   490→                    <div className="space-y-3 border-t border-slate-100 pt-4">
+   491→                      <div className="flex justify-between text-sm">
+   492→                        <span className="text-slate-500">Nom du lot</span>
+   493→                        <span className="font-medium text-slate-900">
+   494→                          {batchName || '—'}
+   495→                        </span>
+   496→                      </div>
+   497→                      <div className="flex justify-between text-sm">
+   498→                        <span className="text-slate-500">Quantité</span>
+   499→                        <span className="font-bold" style={{ color: packDef.color }}>
+   500→                          {quantity} QR codes
+   501→                        </span>
+   502→                      </div>
+   503→                      <div className="flex justify-between text-sm">
+   504→                        <span className="text-slate-500">Format</span>
+   505→                        <span className="font-medium text-slate-900">PNG 200px</span>
+   506→                      </div>
+   507→                    </div>
+   508→                  </div>
+   509→                </div>
+   510→              </div>
+   511→            </motion.div>
+   512→          )}
+   513→
+   514→          {/* ============ STEP 2: Results ============ */}
+   515→          {step === 2 && batch && packDef && (
+   516→            <motion.div
+   517→              key="step2"
+   518→              custom={direction}
+   519→              variants={slideVariants}
+   520→              initial="enter"
+   521→              animate="center"
+   522→              exit="exit"
+   523→              transition={{ duration: 0.35, ease: 'easeInOut' }}
+   524→            >
+   525→              <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+   526→                <div>
+   527→                  <h2 className="text-2xl font-bold text-slate-900">
+   528→                    {batchName || batch.id}
+   529→                  </h2>
+   530→                  <p className="text-slate-500">
+   531→                    {batch.references.length} QR codes générés avec le pack{' '}
+   532→                    <span className="font-semibold" style={{ color: packDef.color }}>
+   533→                      {packDef.label}
+   534→                    </span>
+   535→                  </p>
+   536→                </div>
+   537→
+   538→                {/* Export buttons */}
+   539→                <div className="mt-3 flex gap-2 sm:mt-0">
+   540→                  <button
+   541→                    type="button"
+   542→                    onClick={exportCSV}
+   543→                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+   544→                  >
+   545→                    <FileSpreadsheet className="h-4 w-4" />
+   546→                    CSV
+   547→                  </button>
+   548→                  <button
+   549→                    type="button"
+   550→                    onClick={exportPDF}
+   551→                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+   552→                  >
+   553→                    <FileText className="h-4 w-4" />
+   554→                    PDF
+   555→                  </button>
+   556→                </div>
+   557→              </div>
+   558→
+   559→              {/* QR Code Grid */}
+   560→              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+   561→                {batch.references.map((ref, idx) => {
+   562→                  const isCopied = copiedRef === ref;
+   563→                  return (
+   564→                    <motion.div
+   565→                      key={ref}
+   566→                      initial={{ opacity: 0, y: 20 }}
+   567→                      animate={{ opacity: 1, y: 0 }}
+   568→                      transition={{ delay: idx * 0.03, duration: 0.3 }}
+   569→                      className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+   570→                    >
+   571→                      {/* Colored top bar */}
+   572→                      <div
+   573→                        className="h-1.5 w-full"
+   574→                        style={{ background: packDef.gradient }}
+   575→                      />
+   576→
+   577→                      {/* QR Image */}
+   578→                      <div className="flex items-center justify-center p-4">
+   579→                        {/* eslint-disable-next-line @next/next/no-img-element */}
+   580→                        <img
+   581→                          src={`/api/qr/${ref}?size=200`}
+   582→                          alt={`QR ${ref}`}
+   583→                          width={128}
+   584→                          height={128}
+   585→                          className="rounded-lg"
+   586→                          loading="lazy"
+   587→                        />
+   588→                      </div>
+   589→
+   590→                      {/* Reference + status */}
+   591→                      <div className="border-t border-slate-100 px-3 py-2.5">
+   592→                        <p className="truncate font-mono text-xs text-slate-700">
+   593→                          {ref}
+   594→                        </p>
+   595→                        <span className="mt-1 inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+   596→                          En stock
+   597→                        </span>
+   598→                      </div>
+   599→
+   600→                      {/* Hover actions overlay */}
+   601→                      <div className="absolute inset-x-0 bottom-0 flex gap-1 border-t border-slate-100 bg-white/95 px-3 py-2 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+   602→                        <button
+   603→                          type="button"
+   604→                          onClick={() => copyReference(ref)}
+   605→                          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-slate-100 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-200"
+   606→                          title="Copier la référence"
+   607→                        >
+   608→                          {isCopied ? (
+   609→                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+   610→                          ) : (
+   611→                            <Copy className="h-3.5 w-3.5" />
+   612→                          )}
+   613→                          {isCopied ? 'Copié' : 'Copier'}
+   614→                        </button>
+   615→                        <button
+   616→                          type="button"
+   617→                          onClick={() => downloadQR(ref)}
+   618→                          className="flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-medium text-white transition"
+   619→                          style={{ background: packDef.gradient }}
+   620→                          title="Télécharger le QR code"
+   621→                        >
+   622→                          <Download className="h-3.5 w-3.5" />
+   623→                          PNG
+   624→                        </button>
+   625→                      </div>
+   626→                    </motion.div>
+   627→                  );
+   628→                })}
+   629→              </div>
+   630→            </motion.div>
+   631→          )}
+   632→        </AnimatePresence>
+   633→      </div>
+   634→
+   635→      {/* ---- Footer Navigation ---- */}
+   636→      <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
+   637→        <button
+   638→          type="button"
+   639→          onClick={goBack}
+   640→          disabled={step === 0}
+   641→          className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition ${
+   642→            step === 0
+   643→              ? 'cursor-not-allowed text-slate-300'
+   644→              : 'text-slate-600 hover:bg-slate-100'
+   645→          }`}
+   646→        >
+   647→          <ArrowLeft className="h-4 w-4" />
+   648→          Retour
+   649→        </button>
+   650→
+   651→        <button
+   652→          type="button"
+   653→          onClick={goNext}
+   654→          disabled={
+   655→            (step === 0 && !selectedPack) || loading || (step === 2 && !batch)
+   656→          }
+   657→          className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition ${
+   658→            step === 0 && !selectedPack
+   659→              ? 'cursor-not-allowed bg-slate-300'
+   660→              : loading
+   661→                ? 'cursor-wait bg-purple-400'
+   662→                : step === 2
+   663→                  ? 'cursor-default bg-slate-300'
+   664→                  : 'bg-purple-600 shadow-md shadow-purple-200 hover:bg-purple-700'
+   665→          }`}
+   666→        >
+   667→          {loading ? (
+   668→            <>
+   669→              <Loader2 className="h-4 w-4 animate-spin" />
+   670→              Génération…
+   671→            </>
+   672→          ) : step === 2 ? (
+   673→            'Terminé'
+   674→          ) : (
+   675→            <>
+   676→              {step === 0 ? 'Continuer' : 'Générer'}
+   677→              <ArrowRight className="h-4 w-4" />
+   678→            </>
+   679→          )}
+   680→        </button>
+   681→      </div>
+   682→    </div>
+   683→  );
+   684→}
+   685→
