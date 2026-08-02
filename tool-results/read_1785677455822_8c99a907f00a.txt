@@ -1,0 +1,926 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef } from 'react';
+     4→import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'framer-motion';
+     5→import {
+     6→  QrCode, Shield, Zap, BarChart3, Building2, ScanLine,
+     7→  Heart, PartyPopper, Home, ArrowRight, X, ChevronRight,
+     8→  Mail, Lock, Loader2, Eye, EyeOff, LogIn, Sparkles,
+     9→  Layers, Globe, MousePointerClick, FileDown, Users, Play,
+    10→  Check, Star, ArrowUpRight,
+    11→} from 'lucide-react';
+    12→import { useAuthStore, type AuthUser } from '@/store/auth';
+    13→
+    14→/* ================================================================== */
+    15→/*  CONSTANTS                                                          */
+    16→/* ================================================================== */
+    17→
+    18→const QRIOO = {
+    19→  purple: '#7C3AED',
+    20→  'purple-light': '#A78BFA',
+    21→  'purple-dark': '#5B21B6',
+    22→  amber: '#F59E0B',
+    23→  emerald: '#10B981',
+    24→  slate: '#64748B',
+    25→};
+    26→
+    27→/* ─── Packs ─────────────────────────────────────────────────────── */
+    28→
+    29→const PACKS = [
+    30→  {
+    31→    name: 'Pratique',
+    32→    icon: ScanLine,
+    33→    color: QRIOO.amber,
+    34→    gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    35→    bgLight: 'rgba(245,158,11,0.08)',
+    36→    desc: 'Bagages, objets perdus, étiquettes voyage.',
+    37→    detail: 'Retrouvez vos affaires en un scan grâce à des QR codes liés à vos informations de contact.',
+    38→    examples: ['Valises', 'Cartes de visite', 'Étiquettes', 'Clés'],
+    39→  },
+    40→  {
+    41→    name: 'Émotion',
+    42→    icon: Heart,
+    43→    color: QRIOO.purple,
+    44→    gradient: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 100%)',
+    45→    bgLight: 'rgba(124,58,237,0.08)',
+    46→    desc: 'Messages, souvenirs, témoignages.',
+    47→    detail: 'Créez des connexions émotionnelles uniques avec des contenus personnalisés.',
+    48→    examples: ["Livre d'or", 'Vœux', 'Dédicaces', 'Témoignages'],
+    49→  },
+    50→  {
+    51→    name: 'Événementiel',
+    52→    icon: PartyPopper,
+    53→    color: QRIOO.emerald,
+    54→    gradient: 'linear-gradient(135deg, #34D399 0%, #059669 100%)',
+    55→    bgLight: 'rgba(16,185,129,0.08)',
+    56→    desc: 'Weddings, concerts, conférences.',
+    57→    detail: 'Digitalisez vos événements avec des QR codes interactifs pour vos invités.',
+    58→    examples: ['Mariages', 'Concerts', 'Séminaires', 'Gala'],
+    59→  },
+    60→  {
+    61→    name: 'Immobilier',
+    62→    icon: Home,
+    63→    color: QRIOO.slate,
+    64→    gradient: 'linear-gradient(135deg, #94A3B8 0%, #475569 100%)',
+    65→    bgLight: 'rgba(71,85,105,0.08)',
+    66→    desc: 'Visites virtuelles, fiches biens, contacts.',
+    67→    detail: 'Modernisez vos annonces immobilières avec des QR codes sur panneaux et supports.',
+    68→    examples: ['Panneaux', 'Brochures', 'Visites', 'Contacts'],
+    69→  },
+    70→];
+    71→
+    72→/* ─── How it works ──────────────────────────────────────────────── */
+    73→
+    74→const STEPS = [
+    75→  {
+    76→    num: '01',
+    77→    title: 'Choisissez votre pack',
+    78→    desc: 'Sélectionnez parmi nos 4 packs spécialisés : Pratique, Émotion, Événementiel ou Immobilier.',
+    79→    icon: Layers,
+    80→  },
+    81→  {
+    82→    num: '02',
+    83→    title: 'Générez vos QR codes',
+    84→    desc: 'Configurez la quantité et générez vos QR codes personnalisés en un clic.',
+    85→    icon: Sparkles,
+    86→  },
+    87→  {
+    88→    num: '03',
+    89→    title: 'Activez et suivez',
+    90→    desc: 'Activez le contenu de chaque QR code et suivez les scans en temps réel.',
+    91→    icon: BarChart3,
+    92→  },
+    93→];
+    94→
+    95→/* ─── Features ──────────────────────────────────────────────────── */
+    96→
+    97→const FEATURES = [
+    98→  { icon: Zap, title: 'Scan instantané', desc: 'QR codes activés en moins de 2 secondes', color: QRIOO.amber },
+    99→  { icon: BarChart3, title: 'Dashboard en temps réel', desc: 'Statistiques et activité en direct sur votre tableau de bord', color: QRIOO.purple },
+   100→  { icon: Building2, title: 'Multi-agences', desc: 'Gérez plusieurs agences depuis un seul compte super admin', color: QRIOO.emerald },
+   101→  { icon: Shield, title: 'Sécurisé', desc: 'Authentification JWT et rôles avancés pour protéger vos données', color: QRIOO.slate },
+   102→  { icon: FileDown, title: 'Export PDF & CSV', desc: 'Téléchargez vos lots de QR codes en PDF imprimable ou CSV', color: QRIOO.amber },
+   103→  { icon: Users, title: 'Traçabilité complète', desc: 'Suivez chaque QR code : en stock, activé, scanné avec historique', color: QRIOO.purple },
+   104→];
+   105→
+   106→/* ─── Testimonials ──────────────────────────────────────────────── */
+   107→
+   108→const TESTIMONIALS = [
+   109→  {
+   110→    name: 'Aminata Diallo',
+   111→    role: 'Directrice, Voyages Sérénité',
+   112→    text: 'Qrioo a transformé notre gestion des bagages perdus. Nos clients scannent et nous retrouvent leurs affaires en quelques minutes.',
+   113→    avatar: 'AD',
+   114→    color: QRIOO.amber,
+   115→  },
+   116→  {
+   117→    name: 'Omar Ba',
+   118→    role: 'Agent, Azur Immo',
+   119→    text: 'Les QR codes sur nos panneaux immobiliers génèrent 3x plus de contacts. Un vrai game-changer pour nos ventes.',
+   120→    avatar: 'OB',
+   121→    color: QRIOO.slate,
+   122→  },
+   123→  {
+   124→    name: 'Fatou Sow',
+   125→    role: 'Wedding Planner',
+   126→    text: 'Le pack Événementiel est magique. Les invités scannent, laissent des messages, et les couples gardent un souvenir unique.',
+   127→    avatar: 'FS',
+   128→    color: QRIOO.purple,
+   129→  },
+   130→];
+   131→
+   132→/* ─── Demo accounts ─────────────────────────────────────────────── */
+   133→
+   134→const DEMO_ACCOUNTS = [
+   135→  { email: 'superadmin@qrioo.com', password: 'admin123', role: 'SUPERADMIN' },
+   136→  { email: 'admin@voyages-serenite.com', password: 'agence123', role: 'ADMIN_AGENCE', agency: 'Voyages Sérénité' },
+   137→  { email: 'admin@azur-immo.com', password: 'agence123', role: 'ADMIN_AGENCE', agency: 'Azur Immo' },
+   138→];
+   139→
+   140→/* ================================================================== */
+   141→/*  ANIMATIONS                                                         */
+   142→/* ================================================================== */
+   143→
+   144→const fadeUp = {
+   145→  hidden: { opacity: 0, y: 30 },
+   146→  visible: { opacity: 1, y: 0 },
+   147→};
+   148→
+   149→const fadeIn = {
+   150→  hidden: { opacity: 0 },
+   151→  visible: { opacity: 1 },
+   152→};
+   153→
+   154→const scaleIn = {
+   155→  hidden: { opacity: 0, scale: 0.9 },
+   156→  visible: { opacity: 1, scale: 1 },
+   157→};
+   158→
+   159→const stagger = {
+   160→  visible: { transition: { staggerChildren: 0.1 } },
+   161→};
+   162→
+   163→/* ================================================================== */
+   164→/*  SECTION WRAPPER                                                    */
+   165→/* ================================================================== */
+   166→
+   167→function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
+   168→  const ref = useRef(null);
+   169→  const isInView = useInView(ref, { once: true, margin: '-80px' });
+   170→  return (
+   171→    <motion.section
+   172→      ref={ref}
+   173→      id={id}
+   174→      initial="hidden"
+   175→      animate={isInView ? 'visible' : 'hidden'}
+   176→      variants={stagger}
+   177→      className={className}
+   178→    >
+   179→      {children}
+   180→    </motion.section>
+   181→  );
+   182→}
+   183→
+   184→/* ================================================================== */
+   185→/*  COMPONENT                                                          */
+   186→/* ================================================================== */
+   187→
+   188→export default function LandingPage() {
+   189→  const [showLogin, setShowLogin] = useState(false);
+   190→  const [email, setEmail] = useState('');
+   191→  const [password, setPassword] = useState('');
+   192→  const [showPassword, setShowPassword] = useState(false);
+   193→  const [loading, setLoading] = useState(false);
+   194→  const [error, setError] = useState('');
+   195→  const { login } = useAuthStore();
+   196→
+   197→  const heroRef = useRef(null);
+   198→  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+   199→  const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
+   200→  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+   201→
+   202→  const [mounted, setMounted] = useState(false);
+   203→  useEffect(() => { setMounted(true); }, []);
+   204→
+   205→  const handleLogin = async (e: React.FormEvent) => {
+   206→    e.preventDefault();
+   207→    if (!email || !password) return;
+   208→    setLoading(true);
+   209→    setError('');
+   210→    try {
+   211→      const res = await fetch('/api/auth/login', {
+   212→        method: 'POST',
+   213→        headers: { 'Content-Type': 'application/json' },
+   214→        body: JSON.stringify({ email, password }),
+   215→      });
+   216→      const data = await res.json();
+   217→      if (res.ok && data.success) {
+   218→        login(data.token, data.user as AuthUser);
+   219→      } else {
+   220→        setError(data.error || 'Erreur de connexion');
+   221→      }
+   222→    } catch {
+   223→      setError('Erreur réseau');
+   224→    }
+   225→    setLoading(false);
+   226→  };
+   227→
+   228→  const handleDemoLogin = (account: (typeof DEMO_ACCOUNTS)[0]) => {
+   229→    setEmail(account.email);
+   230→    setPassword(account.password);
+   231→  };
+   232→
+   233→  return (
+   234→    <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
+   235→      {/* ============================================================= */}
+   236→      {/*  NAVBAR                                                        */}
+   237→      {/* ============================================================= */}
+   238→      <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
+   239→        style={{ backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)', backgroundColor: 'rgba(255,255,255,0.82)' }}
+   240→      >
+   241→        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-200 to-transparent" />
+   242→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between">
+   243→          <div className="flex items-center gap-2.5">
+   244→            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg shadow-purple-200"
+   245→              style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}>
+   246→              <QrCode className="w-5 h-5 text-white" />
+   247→            </div>
+   248→            <span className="text-xl font-black text-gray-900 tracking-tight">Qrioo</span>
+   249→          </div>
+   250→          <nav className="hidden md:flex items-center gap-8">
+   251→            <a href="#packs" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Packs</a>
+   252→            <a href="#how" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Comment ça marche</a>
+   253→            <a href="#features" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Fonctionnalités</a>
+   254→            <a href="#testimonials" className="text-sm font-medium text-gray-600 hover:text-purple-600 transition">Témoignages</a>
+   255→          </nav>
+   256→          <button
+   257→            onClick={() => setShowLogin(true)}
+   258→            className="px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all duration-200 hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.03] active:scale-[0.98]"
+   259→            style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}
+   260→          >
+   261→            Connexion
+   262→          </button>
+   263→        </div>
+   264→      </header>
+   265→
+   266→      {/* ============================================================= */}
+   267→      {/*  HERO                                                          */}
+   268→      {/* ============================================================= */}
+   269→      <section ref={heroRef} className="relative min-h-screen flex items-center pt-18">
+   270→        {/* Background elements */}
+   271→        <div className="absolute inset-0 overflow-hidden">
+   272→          {/* Gradient mesh */}
+   273→          <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
+   274→            style={{ background: 'radial-gradient(circle, #A855F7, transparent 70%)' }} />
+   275→          <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] rounded-full opacity-15 blur-[100px]"
+   276→            style={{ background: 'radial-gradient(circle, #F59E0B, transparent 70%)' }} />
+   277→          {/* Grid pattern */}
+   278→          <div className="absolute inset-0 opacity-[0.025]"
+   279→            style={{ backgroundImage: 'radial-gradient(circle, #7C3AED 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+   280→        </div>
+   281→
+   282→        <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-20">
+   283→          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+   284→            {/* Left content */}
+   285→            <div>
+   286→              {mounted && (
+   287→                <motion.div variants={stagger} initial="hidden" animate="visible">
+   288→                  <motion.div variants={fadeUp} transition={{ duration: 0.5 }}
+   289→                    className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-semibold mb-8"
+   290→                    style={{ borderColor: '#E9D5FF', color: QRIOO.purple, backgroundColor: '#FAF5FF' }}
+   291→                  >
+   292→                    <Sparkles className="w-3.5 h-3.5" />
+   293→                    La nouvelle ère des QR codes dynamiques
+   294→                  </motion.div>
+   295→
+   296→                  <motion.h1 variants={fadeUp} transition={{ duration: 0.6, delay: 0.1 }}
+   297→                    className="text-4xl sm:text-5xl lg:text-6xl xl:text-[4.25rem] font-black text-gray-900 tracking-tight leading-[1.08]"
+   298→                  >
+   299→                    Créez des QR codes{' '}
+   300→                    <span className="relative">
+   301→                      <span className="relative z-10 bg-gradient-to-r from-purple-600 via-purple-500 to-violet-500 bg-clip-text text-transparent">
+   302→                        uniques
+   303→                      </span>
+   304→                    </span>
+   305→                    <br />
+   306→                    qui racontent votre{' '}
+   307→                    <span className="relative">
+   308→                      <span className="relative z-10 bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">
+   309→                        histoire
+   310→                      </span>
+   311→                    </span>
+   312→                  </motion.h1>
+   313→
+   314→                  <motion.p variants={fadeUp} transition={{ duration: 0.6, delay: 0.2 }}
+   315→                    className="mt-6 text-lg sm:text-xl text-gray-500 max-w-xl leading-relaxed"
+   316→                  >
+   317→                    Créez, gérez et suivez vos QR codes dynamiques sur une seule plateforme.
+   318→                    Objets perdus, émotions, événements et immobilier — tout est possible.
+   319→                  </motion.p>
+   320→
+   321→                  <motion.div variants={fadeUp} transition={{ duration: 0.6, delay: 0.3 }} className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+   322→                    <button
+   323→                      onClick={() => setShowLogin(true)}
+   324→                      className="w-full sm:w-auto group relative px-8 py-4 rounded-2xl font-bold text-white text-base transition-all duration-300 hover:shadow-2xl hover:shadow-purple-300/40 hover:scale-[1.03] active:scale-[0.98] flex items-center justify-center gap-2.5"
+   325→                      style={{ background: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 50%, #6D28D9 100%)' }}
+   326→                    >
+   327→                      Commencer gratuitement
+   328→                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+   329→                    </button>
+   330→                    <button
+   331→                      onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}
+   332→                      className="w-full sm:w-auto group flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl font-bold text-gray-700 text-base border-2 border-gray-200 hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50/50 transition-all duration-300"
+   333→                    >
+   334→                      <Play className="w-4 h-4" />
+   335→                      Voir comment ça marche
+   336→                    </button>
+   337→                  </motion.div>
+   338→
+   339→                  {/* Trust indicators */}
+   340→                  <motion.div variants={fadeUp} transition={{ duration: 0.6, delay: 0.4 }} className="mt-12 flex items-center gap-6">
+   341→                    <div className="flex -space-x-2.5">
+   342→                      {['AD', 'OB', 'FS', 'MK'].map((initials, i) => (
+   343→                        <div key={initials} className={`w-9 h-9 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${
+   344→                          i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-slate-500' : i === 2 ? 'bg-purple-500' : 'bg-emerald-500'
+   345→                        }`} style={{ zIndex: 4 - i }}>
+   346→                          {initials}
+   347→                        </div>
+   348→                      ))}
+   349→                    </div>
+   350→                    <div>
+   351→                      <div className="flex items-center gap-1">
+   352→                        {[...Array(5)].map((_, i) => (
+   353→                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+   354→                        ))}
+   355→                      </div>
+   356→                      <p className="text-xs text-gray-400 mt-0.5">Utilisé par des agences à travers l'Afrique</p>
+   357→                    </div>
+   358→                  </motion.div>
+   359→                </motion.div>
+   360→              )}
+   361→            </div>
+   362→
+   363→            {/* Right visual — Hero illustration */}
+   364→            {mounted && (
+   365→              <motion.div
+   366→                initial={{ opacity: 0, x: 40, scale: 0.95 }}
+   367→                animate={{ opacity: 1, x: 0, scale: 1 }}
+   368→                transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+   369→                className="relative hidden lg:block"
+   370→              >
+   371→                <div className="relative">
+   372→                  {/* Main image */}
+   373→                  <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-purple-200/30 border border-white/60">
+   374→                    {/* eslint-disable-next-line @next/next/no-img-element */}
+   375→                    <img src="/hero-illustration.png" alt="Qrioo Dashboard" className="w-full h-auto" />
+   376→                    {/* Overlay gradient */}
+   377→                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
+   378→                  </div>
+   379→
+   380→                  {/* Floating card — QR scan count */}
+   381→                  <motion.div
+   382→                    animate={{ y: [0, -8, 0] }}
+   383→                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+   384→                    className="absolute -left-8 top-1/3 bg-white rounded-2xl shadow-xl shadow-gray-200/60 border border-gray-100 p-4 flex items-center gap-3"
+   385→                  >
+   386→                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-100">
+   387→                      <ScanLine className="w-5 h-5 text-emerald-600" />
+   388→                    </div>
+   389→                    <div>
+   390→                      <p className="text-lg font-black text-gray-900">2,847</p>
+   391→                      <p className="text-[11px] text-gray-400">Scans ce mois</p>
+   392→                    </div>
+   393→                  </motion.div>
+   394→
+   395→                  {/* Floating card — QR generated */}
+   396→                  <motion.div
+   397→                    animate={{ y: [0, 6, 0] }}
+   398→                    transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+   399→                    className="absolute -right-4 bottom-1/4 bg-white rounded-2xl shadow-xl shadow-gray-200/60 border border-gray-100 p-4 flex items-center gap-3"
+   400→                  >
+   401→                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-100">
+   402→                      <QrCode className="w-5 h-5 text-purple-600" />
+   403→                    </div>
+   404→                    <div>
+   405→                      <p className="text-lg font-black text-gray-900">12,400+</p>
+   406→                      <p className="text-[11px] text-gray-400">QR codes créés</p>
+   407→                    </div>
+   408→                  </motion.div>
+   409→                </div>
+   410→              </motion.div>
+   411→            )}
+   412→          </div>
+   413→        </motion.div>
+   414→
+   415→        {/* Scroll indicator */}
+   416→        <motion.div
+   417→          animate={{ y: [0, 8, 0] }}
+   418→          transition={{ duration: 2, repeat: Infinity }}
+   419→          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
+   420→        >
+   421→          <div className="w-6 h-10 rounded-full border-2 border-gray-300 flex justify-center pt-2">
+   422→            <motion.div animate={{ y: [0, 8, 0], opacity: [1, 0.3, 1] }} transition={{ duration: 2, repeat: Infinity }}
+   423→              className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+   424→          </div>
+   425→        </motion.div>
+   426→      </section>
+   427→
+   428→      {/* ============================================================= */}
+   429→      {/*  TRUSTED BY BAR                                                */}
+   430→      {/* ============================================================= */}
+   431→      <Section className="py-12 border-y border-gray-100 bg-gray-50/50">
+   432→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   433→          <motion.p variants={fadeIn} transition={{ duration: 0.5 }} className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-8">
+   434→            Conçu pour les professionnels
+   435→          </motion.p>
+   436→          <motion.div variants={stagger} className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+   437→            {['Agences de voyage', 'Immobilier', 'Wedding Planners', 'Événementiel', 'Hôtellerie'].map((sector) => (
+   438→              <motion.span key={sector} variants={fadeUp} transition={{ duration: 0.4 }}
+   439→                className="text-sm font-semibold text-gray-300 hover:text-gray-500 transition">
+   440→                {sector}
+   441→              </motion.span>
+   442→            ))}
+   443→          </motion.div>
+   444→        </div>
+   445→      </Section>
+   446→
+   447→      {/* ============================================================= */}
+   448→      {/*  PACKS                                                         */}
+   449→      {/* ============================================================= */}
+   450→      <Section id="packs" className="py-24 sm:py-32">
+   451→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   452→          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="text-center mb-16">
+   453→            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4"
+   454→              style={{ color: QRIOO.purple, backgroundColor: '#FAF5FF' }}>
+   455→              <Layers className="w-3 h-3" /> Packs
+   456→            </span>
+   457→            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900">
+   458→              Un QR code pour{' '}
+   459→              <span className="bg-gradient-to-r from-purple-600 to-violet-500 bg-clip-text text-transparent">chaque besoin</span>
+   460→            </h2>
+   461→            <p className="mt-4 text-gray-500 text-lg max-w-2xl mx-auto">
+   462→              4 packs spécialisés couvrent tous vos cas d'usage professionnels.
+   463→            </p>
+   464→          </motion.div>
+   465→
+   466→          <motion.div variants={stagger} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+   467→            {PACKS.map((pack) => {
+   468→              const Icon = pack.icon;
+   469→              return (
+   470→                <motion.div
+   471→                  key={pack.name}
+   472→                  variants={scaleIn}
+   473→                  transition={{ duration: 0.5 }}
+   474→                  whileHover={{ y: -6, transition: { duration: 0.25 } }}
+   475→                  className="group relative rounded-3xl p-7 border border-gray-100 bg-white hover:border-gray-200 hover:shadow-xl hover:shadow-gray-100/50 transition-all duration-300 overflow-hidden"
+   476→                >
+   477→                  {/* Top gradient line */}
+   478→                  <div className="absolute top-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+   479→                    style={{ background: pack.gradient }} />
+   480→
+   481→                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 text-white shadow-lg transition-transform duration-300 group-hover:scale-110"
+   482→                    style={{ background: pack.gradient }}>
+   483→                    <Icon className="w-7 h-7" />
+   484→                  </div>
+   485→
+   486→                  <h3 className="text-xl font-bold text-gray-900 mb-2">{pack.name}</h3>
+   487→                  <p className="text-sm text-gray-500 leading-relaxed mb-5">{pack.desc}</p>
+   488→
+   489→                  {/* Examples tags */}
+   490→                  <div className="flex flex-wrap gap-1.5">
+   491→                    {pack.examples.map((ex) => (
+   492→                      <span key={ex} className="text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
+   493→                        style={{ color: pack.color, backgroundColor: pack.bgLight }}>
+   494→                        {ex}
+   495→                      </span>
+   496→                    ))}
+   497→                  </div>
+   498→
+   499→                  {/* Arrow on hover */}
+   500→                  <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+   501→                    <ArrowUpRight className="w-5 h-5" style={{ color: pack.color }} />
+   502→                  </div>
+   503→                </motion.div>
+   504→              );
+   505→            })}
+   506→          </motion.div>
+   507→        </div>
+   508→      </Section>
+   509→
+   510→      {/* ============================================================= */}
+   511→      {/*  HOW IT WORKS                                                  */}
+   512→      {/* ============================================================= */}
+   513→      <Section id="how" className="py-24 sm:py-32 bg-gray-50">
+   514→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   515→          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="text-center mb-16">
+   516→            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4"
+   517→              style={{ color: QRIOO.emerald, backgroundColor: '#ECFDF5' }}>
+   518→              <MousePointerClick className="w-3 h-3" /> Simple
+   519→            </span>
+   520→            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900">
+   521→              Comment ça{' '}
+   522→              <span className="bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent">marche</span>
+   523→            </h2>
+   524→            <p className="mt-4 text-gray-500 text-lg max-w-2xl mx-auto">
+   525→              Trois étapes simples pour commencer à utiliser Qrioo.
+   526→            </p>
+   527→          </motion.div>
+   528→
+   529→          <motion.div variants={stagger} className="grid md:grid-cols-3 gap-8 relative">
+   530→            {/* Connector line (desktop) */}
+   531→            <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-px bg-gradient-to-r from-purple-200 via-emerald-200 to-amber-200" />
+   532→
+   533→            {STEPS.map((step, i) => {
+   534→              const Icon = step.icon;
+   535→              return (
+   536→                <motion.div key={step.num} variants={fadeUp} transition={{ duration: 0.5, delay: i * 0.15 }}
+   537→                  className="relative text-center"
+   538→                >
+   539→                  <div className="relative inline-flex mb-6">
+   540→                    <div className="w-16 h-16 rounded-2xl bg-white border-2 border-gray-100 shadow-lg shadow-gray-100/50 flex items-center justify-center relative z-10">
+   541→                      <Icon className="w-7 h-7" style={{ color: [QRIOO.purple, QRIOO.emerald, QRIOO.amber][i] }} />
+   542→                    </div>
+   543→                    <span className="absolute -top-2 -right-2 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black text-white z-20"
+   544→                      style={{ background: [QRIOO.purple, QRIOO.emerald, QRIOO.amber][i] }}>
+   545→                      {step.num}
+   546→                    </span>
+   547→                  </div>
+   548→                  <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
+   549→                  <p className="text-sm text-gray-500 leading-relaxed max-w-xs mx-auto">{step.desc}</p>
+   550→                </motion.div>
+   551→              );
+   552→            })}
+   553→          </motion.div>
+   554→        </div>
+   555→      </Section>
+   556→
+   557→      {/* ============================================================= */}
+   558→      {/*  FEATURES                                                      */}
+   559→      {/* ============================================================= */}
+   560→      <Section id="features" className="py-24 sm:py-32">
+   561→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   562→          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="text-center mb-16">
+   563→            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4"
+   564→              style={{ color: QRIOO.amber, backgroundColor: '#FFFBEB' }}>
+   565→              <Zap className="w-3 h-3" /> Fonctionnalités
+   566→            </span>
+   567→            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900">
+   568→              Tout ce qu'il vous{' '}
+   569→              <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">faut</span>
+   570→            </h2>
+   571→            <p className="mt-4 text-gray-500 text-lg max-w-2xl mx-auto">
+   572→              Une plateforme complète pour créer, gérer et tracer vos QR codes.
+   573→            </p>
+   574→          </motion.div>
+   575→
+   576→          <motion.div variants={stagger} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+   577→            {FEATURES.map((feat) => {
+   578→              const Icon = feat.icon;
+   579→              return (
+   580→                <motion.div
+   581→                  key={feat.title}
+   582→                  variants={fadeUp}
+   583→                  transition={{ duration: 0.4 }}
+   584→                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+   585→                  className="group flex gap-4 p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all duration-300"
+   586→                >
+   587→                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+   588→                    style={{ backgroundColor: `${feat.color}12`, color: feat.color }}>
+   589→                    <Icon className="w-6 h-6" />
+   590→                  </div>
+   591→                  <div>
+   592→                    <h3 className="font-bold text-gray-900 mb-1.5">{feat.title}</h3>
+   593→                    <p className="text-sm text-gray-500 leading-relaxed">{feat.desc}</p>
+   594→                  </div>
+   595→                </motion.div>
+   596→              );
+   597→            })}
+   598→          </motion.div>
+   599→        </div>
+   600→      </Section>
+   601→
+   602→      {/* ============================================================= */}
+   603→      {/*  STATS                                                         */}
+   604→      {/* ============================================================= */}
+   605→      <Section className="py-20">
+   606→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   607→          <motion.div variants={scaleIn} transition={{ duration: 0.6 }}
+   608→            className="rounded-3xl p-10 sm:p-14 relative overflow-hidden"
+   609→            style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #5B21B6 100%)' }}
+   610→          >
+   611→            {/* Pattern overlay */}
+   612→            <div className="absolute inset-0 opacity-[0.06]"
+   613→              style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+   614→            {/* Glow orbs */}
+   615→            <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-purple-400/20 blur-[80px]" />
+   616→            <div className="absolute -bottom-20 -left-20 w-40 h-40 rounded-full bg-amber-400/20 blur-[60px]" />
+   617→
+   618→            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
+   619→              {[
+   620→                { value: '4', suffix: '', label: 'Packs spécialisés', color: '#A78BFA' },
+   621→                { value: '<2', suffix: 's', label: 'Temps de scan', color: '#FBBF24' },
+   622→                { value: '24', suffix: '/7', label: 'Disponibilité', color: '#34D399' },
+   623→                { value: '∞', suffix: '', label: 'QR codes possibles', color: '#F472B6' },
+   624→              ].map((stat) => (
+   625→                <div key={stat.label}>
+   626→                  <p className="text-3xl sm:text-4xl font-black" style={{ color: stat.color }}>
+   627→                    {stat.value}<span className="text-xl">{stat.suffix}</span>
+   628→                  </p>
+   629→                  <p className="text-sm text-white/50 mt-2 font-medium">{stat.label}</p>
+   630→                </div>
+   631→              ))}
+   632→            </div>
+   633→          </motion.div>
+   634→        </div>
+   635→      </Section>
+   636→
+   637→      {/* ============================================================= */}
+   638→      {/*  TESTIMONIALS                                                  */}
+   639→      {/* ============================================================= */}
+   640→      <Section id="testimonials" className="py-24 sm:py-32 bg-gray-50">
+   641→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   642→          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="text-center mb-16">
+   643→            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4"
+   644→              style={{ color: '#EC4899', backgroundColor: '#FDF2F8' }}>
+   645→              <Star className="w-3 h-3" /> Témoignages
+   646→            </span>
+   647→            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900">
+   648→              Ce qu'en disent nos{' '}
+   649→              <span className="bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">utilisateurs</span>
+   650→            </h2>
+   651→          </motion.div>
+   652→
+   653→          <motion.div variants={stagger} className="grid md:grid-cols-3 gap-6">
+   654→            {TESTIMONIALS.map((t, i) => (
+   655→              <motion.div
+   656→                key={t.name}
+   657→                variants={fadeUp}
+   658→                transition={{ duration: 0.5, delay: i * 0.1 }}
+   659→                whileHover={{ y: -4, transition: { duration: 0.2 } }}
+   660→                className="bg-white rounded-2xl p-7 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300"
+   661→              >
+   662→                <div className="flex items-center gap-1 mb-4">
+   663→                  {[...Array(5)].map((_, j) => (
+   664→                    <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
+   665→                  ))}
+   666→                </div>
+   667→                <p className="text-gray-600 leading-relaxed mb-6 text-sm">&ldquo;{t.text}&rdquo;</p>
+   668→                <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+   669→                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white"
+   670→                    style={{ backgroundColor: t.color }}>
+   671→                    {t.avatar}
+   672→                  </div>
+   673→                  <div>
+   674→                    <p className="font-bold text-gray-900 text-sm">{t.name}</p>
+   675→                    <p className="text-xs text-gray-400">{t.role}</p>
+   676→                  </div>
+   677→                </div>
+   678→              </motion.div>
+   679→            ))}
+   680→          </motion.div>
+   681→        </div>
+   682→      </Section>
+   683→
+   684→      {/* ============================================================= */}
+   685→      {/*  CTA                                                           */}
+   686→      {/* ============================================================= */}
+   687→      <Section className="py-24 sm:py-32">
+   688→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+   689→          <motion.div
+   690→            variants={scaleIn}
+   691→            transition={{ duration: 0.6 }}
+   692→            className="rounded-[2rem] p-10 sm:p-16 lg:p-20 text-center relative overflow-hidden"
+   693→            style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%)' }}
+   694→          >
+   695→            {/* Background elements */}
+   696→            <div className="absolute inset-0 opacity-[0.04]"
+   697→              style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+   698→            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-purple-500/10 blur-[100px]" />
+   699→            <div className="absolute -bottom-20 right-0 w-40 h-40 rounded-full bg-amber-400/10 blur-[60px]" />
+   700→
+   701→            <div className="relative z-10">
+   702→              <motion.div variants={fadeUp} transition={{ duration: 0.5 }}
+   703→                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/10 text-sm font-semibold text-white/80 mb-8"
+   704→              >
+   705→                <Sparkles className="w-3.5 h-3.5" />
+   706→                Prêt à transformer votre activité ?
+   707→              </motion.div>
+   708→
+   709→              <motion.h2 variants={fadeUp} transition={{ duration: 0.6, delay: 0.1 }}
+   710→                className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-6 leading-tight"
+   711→              >
+   712→                Commencez à créer vos
+   713→                <br />
+   714→                QR codes dès maintenant
+   715→              </motion.h2>
+   716→
+   717→              <motion.p variants={fadeUp} transition={{ duration: 0.6, delay: 0.2 }}
+   718→                className="text-lg text-white/50 mb-10 max-w-xl mx-auto"
+   719→              >
+   720→                Rejoignez les agences qui utilisent déjà Qrioo pour gérer leurs QR codes dynamiques.
+   721→              </motion.p>
+   722→
+   723→              <motion.div variants={fadeUp} transition={{ duration: 0.6, delay: 0.3 }} className="flex flex-col sm:flex-row items-center justify-center gap-4">
+   724→                <button
+   725→                  onClick={() => setShowLogin(true)}
+   726→                  className="group w-full sm:w-auto px-8 py-4 rounded-2xl font-bold text-purple-700 text-base bg-white hover:bg-gray-50 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 hover:scale-[1.03] active:scale-[0.98] flex items-center justify-center gap-2.5"
+   727→                >
+   728→                  Accéder à Qrioo
+   729→                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+   730→                </button>
+   731→              </motion.div>
+   732→            </div>
+   733→          </motion.div>
+   734→        </div>
+   735→      </Section>
+   736→
+   737→      {/* ============================================================= */}
+   738→      {/*  FOOTER                                                        */}
+   739→      {/* ============================================================= */}
+   740→      <footer className="border-t border-gray-100 mt-auto bg-white">
+   741→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+   742→          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
+   743→            <div className="sm:col-span-2 lg:col-span-1">
+   744→              <div className="flex items-center gap-2.5 mb-4">
+   745→                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+   746→                  style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}>
+   747→                  <QrCode className="w-5 h-5 text-white" />
+   748→                </div>
+   749→                <span className="text-lg font-black text-gray-900">Qrioo</span>
+   750→              </div>
+   751→              <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
+   752→                Plateforme SaaS de QR codes dynamiques. Créez, gérez et suivez vos QR codes en toute simplicité.
+   753→              </p>
+   754→            </div>
+   755→
+   756→            <div>
+   757→              <h4 className="font-bold text-gray-900 text-sm mb-4">Produit</h4>
+   758→              <ul className="space-y-2.5">
+   759→                {['Fonctionnalités', 'Packs', 'Tarifs', 'API'].map((link) => (
+   760→                  <li key={link}>
+   761→                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
+   762→                  </li>
+   763→                ))}
+   764→              </ul>
+   765→            </div>
+   766→
+   767→            <div>
+   768→              <h4 className="font-bold text-gray-900 text-sm mb-4">Entreprise</h4>
+   769→              <ul className="space-y-2.5">
+   770→                {['À propos', 'Blog', 'Carrières', 'Contact'].map((link) => (
+   771→                  <li key={link}>
+   772→                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
+   773→                  </li>
+   774→                ))}
+   775→              </ul>
+   776→            </div>
+   777→
+   778→            <div>
+   779→              <h4 className="font-bold text-gray-900 text-sm mb-4">Légal</h4>
+   780→              <ul className="space-y-2.5">
+   781→                {['Confidentialité', 'CGU', 'Mentions légales'].map((link) => (
+   782→                  <li key={link}>
+   783→                    <a href="#" className="text-sm text-gray-400 hover:text-purple-600 transition">{link}</a>
+   784→                  </li>
+   785→                ))}
+   786→              </ul>
+   787→            </div>
+   788→          </div>
+   789→
+   790→          <div className="pt-8 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+   791→            <p className="text-xs text-gray-400">&copy; {new Date().getFullYear()} Qrioo. Tous droits réservés.</p>
+   792→            <div className="flex items-center gap-2">
+   793→              <Globe className="w-3.5 h-3.5 text-gray-300" />
+   794→              <span className="text-xs text-gray-400">Fait avec passion en Afrique</span>
+   795→            </div>
+   796→          </div>
+   797→        </div>
+   798→      </footer>
+   799→
+   800→      {/* ============================================================= */}
+   801→      {/*  LOGIN MODAL                                                    */}
+   802→      {/* ============================================================= */}
+   803→      <AnimatePresence>
+   804→        {showLogin && (
+   805→          <motion.div
+   806→            initial={{ opacity: 0 }}
+   807→            animate={{ opacity: 1 }}
+   808→            exit={{ opacity: 0 }}
+   809→            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+   810→            onClick={() => setShowLogin(false)}
+   811→          >
+   812→            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+   813→            <motion.div
+   814→              initial={{ opacity: 0, scale: 0.92, y: 30 }}
+   815→              animate={{ opacity: 1, scale: 1, y: 0 }}
+   816→              exit={{ opacity: 0, scale: 0.92, y: 30 }}
+   817→              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+   818→              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+   819→              onClick={(e) => e.stopPropagation()}
+   820→            >
+   821→              {/* Top gradient bar */}
+   822→              <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #A855F7, #7C3AED, #F59E0B)' }} />
+   823→
+   824→              <button
+   825→                onClick={() => setShowLogin(false)}
+   826→                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition"
+   827→              >
+   828→                <X className="w-4 h-4 text-gray-500" />
+   829→              </button>
+   830→
+   831→              <div className="p-8">
+   832→                <div className="flex items-center gap-3 mb-8">
+   833→                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-200"
+   834→                    style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}>
+   835→                    <QrCode className="w-6 h-6 text-white" />
+   836→                  </div>
+   837→                  <div>
+   838→                    <h2 className="text-xl font-black text-gray-900">Connexion</h2>
+   839→                    <p className="text-xs text-gray-400">Accédez à votre espace Qrioo</p>
+   840→                  </div>
+   841→                </div>
+   842→
+   843→                <form onSubmit={handleLogin} className="space-y-4">
+   844→                  <div>
+   845→                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
+   846→                    <div className="relative">
+   847→                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   848→                      <input
+   849→                        type="email"
+   850→                        value={email}
+   851→                        onChange={(e) => setEmail(e.target.value)}
+   852→                        placeholder="votre@email.com"
+   853→                        className="w-full min-h-[48px] pl-11 pr-4 border-2 border-gray-200 rounded-xl bg-gray-50/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all text-sm"
+   854→                        required
+   855→                      />
+   856→                    </div>
+   857→                  </div>
+   858→
+   859→                  <div>
+   860→                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mot de passe</label>
+   861→                    <div className="relative">
+   862→                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   863→                      <input
+   864→                        type={showPassword ? 'text' : 'password'}
+   865→                        value={password}
+   866→                        onChange={(e) => setPassword(e.target.value)}
+   867→                        placeholder="••••••••"
+   868→                        className="w-full min-h-[48px] pl-11 pr-12 border-2 border-gray-200 rounded-xl bg-gray-50/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all text-sm"
+   869→                        required
+   870→                      />
+   871→                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+   872→                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   873→                      </button>
+   874→                    </div>
+   875→                  </div>
+   876→
+   877→                  {error && (
+   878→                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
+   879→                      className="p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600 font-medium">
+   880→                      {error}
+   881→                    </motion.div>
+   882→                  )}
+   883→
+   884→                  <button
+   885→                    type="submit"
+   886→                    disabled={loading || !email || !password}
+   887→                    className="w-full min-h-[48px] rounded-xl font-bold text-white transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-purple-200 hover:scale-[1.01] active:scale-[0.99]"
+   888→                    style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}
+   889→                  >
+   890→                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><LogIn className="w-4 h-4" /> Se connecter</>}
+   891→                  </button>
+   892→                </form>
+   893→
+   894→                <div className="mt-6 pt-6 border-t border-gray-100">
+   895→                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] text-center mb-3">Comptes démo</p>
+   896→                  <div className="space-y-1">
+   897→                    {DEMO_ACCOUNTS.map((account) => (
+   898→                      <button
+   899→                        key={account.email}
+   900→                        type="button"
+   901→                        onClick={() => handleDemoLogin(account)}
+   902→                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-all text-left group"
+   903→                      >
+   904→                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-[10px] font-black text-white shadow-sm ${
+   905→                          account.role === 'SUPERADMIN' ? 'bg-purple-600' : 'bg-amber-500'
+   906→                        }`}>
+   907→                          {account.role === 'SUPERADMIN' ? 'SA' : 'AA'}
+   908→                        </div>
+   909→                        <div className="flex-1 min-w-0">
+   910→                          <p className="text-sm font-semibold text-gray-800 truncate">{account.agency || 'Super Admin'}</p>
+   911→                          <p className="text-[11px] text-gray-400 truncate">{account.email}</p>
+   912→                        </div>
+   913→                        <ArrowRight className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+   914→                      </button>
+   915→                    ))}
+   916→                  </div>
+   917→                </div>
+   918→              </div>
+   919→            </motion.div>
+   920→          </motion.div>
+   921→        )}
+   922→      </AnimatePresence>
+   923→    </div>
+   924→  );
+   925→}
+   926→
